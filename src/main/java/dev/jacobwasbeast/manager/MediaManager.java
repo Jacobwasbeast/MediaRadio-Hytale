@@ -624,6 +624,15 @@ public class MediaManager {
         if (url == null || url.isEmpty()) {
             return CompletableFuture.completedFuture(null);
         }
+        var playerLibrary = plugin.getMediaLibrary();
+        if (playerLibrary != null) {
+            boolean stillReferenced = playerLibrary.getAllSongs()
+                    .stream()
+                    .anyMatch(song -> url.equals(song.url));
+            if (stillReferenced) {
+                return CompletableFuture.completedFuture(null);
+            }
+        }
         String trackId = getTrackIdForUrl(url);
         return CompletableFuture.runAsync(() -> {
             deleteMediaAssets(trackId);
