@@ -56,6 +56,22 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
             commandBuilder.set("#SeekSlider.Value", (int) (session.getProgress() * 100));
             commandBuilder.set("#SeekSlider.Visible", true);
             commandBuilder.set("#LoopButton.Text", formatLoopLabel(session.isLoopEnabled()));
+            String nowPlayingAsset = session.getThumbnailUrl();
+            if ((nowPlayingAsset == null || nowPlayingAsset.isEmpty()) && session.getUrl() != null) {
+                var mediaManager = MediaRadioPlugin.getInstance().getMediaManager();
+                if (mediaManager != null) {
+                    String trackId = mediaManager.getTrackIdForUrl(session.getUrl());
+                    if (mediaManager.hasThumbnail(trackId)) {
+                        nowPlayingAsset = mediaManager.getThumbnailAssetPath(trackId);
+                    }
+                }
+            }
+            if (nowPlayingAsset != null && !nowPlayingAsset.isEmpty()) {
+                commandBuilder.set("#NowPlayingThumb.AssetPath", nowPlayingAsset);
+                commandBuilder.set("#NowPlayingThumb.Visible", true);
+            } else {
+                commandBuilder.set("#NowPlayingThumb.Visible", false);
+            }
         } else {
             commandBuilder.set("#NowPlayingTitle.Text", "No Media Playing");
             commandBuilder.set("#NowPlayingArtist.Text", "");
@@ -65,6 +81,7 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
             commandBuilder.set("#SeekSlider.Visible", false);
             var manager = MediaRadioPlugin.getInstance().getPlaybackManager();
             commandBuilder.set("#LoopButton.Text", formatLoopLabel(manager.isLoopEnabled(playerRef.getUuid())));
+            commandBuilder.set("#NowPlayingThumb.Visible", false);
         }
 
         if (session != null && !session.getUrl().isEmpty()) {
@@ -347,6 +364,22 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
             commandBuilder.set("#SeekSlider.Value", (int) (session.getProgress() * 100));
             commandBuilder.set("#SeekSlider.Visible", true);
             commandBuilder.set("#LoopButton.Text", formatLoopLabel(session.isLoopEnabled()));
+            String nowPlayingAsset = session.getThumbnailUrl();
+            if ((nowPlayingAsset == null || nowPlayingAsset.isEmpty()) && session.getUrl() != null) {
+                var mediaManager = MediaRadioPlugin.getInstance().getMediaManager();
+                if (mediaManager != null) {
+                    String trackId = mediaManager.getTrackIdForUrl(session.getUrl());
+                    if (mediaManager.hasThumbnail(trackId)) {
+                        nowPlayingAsset = mediaManager.getThumbnailAssetPath(trackId);
+                    }
+                }
+            }
+            if (nowPlayingAsset != null && !nowPlayingAsset.isEmpty()) {
+                commandBuilder.set("#NowPlayingThumb.AssetPath", nowPlayingAsset);
+                commandBuilder.set("#NowPlayingThumb.Visible", true);
+            } else {
+                commandBuilder.set("#NowPlayingThumb.Visible", false);
+            }
         } else {
             LAST_TIME_SECONDS.remove(playerId);
             commandBuilder.set("#NowPlayingTime.Text", "0:00 / 0:00");
@@ -354,6 +387,7 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
             commandBuilder.set("#SeekSlider.Visible", false);
             var manager = MediaRadioPlugin.getInstance().getPlaybackManager();
             commandBuilder.set("#LoopButton.Text", formatLoopLabel(manager.isLoopEnabled(playerRef.getUuid())));
+            commandBuilder.set("#NowPlayingThumb.Visible", false);
         }
         UIEventBuilder eventBuilder = new UIEventBuilder();
         addEventBindings(eventBuilder);

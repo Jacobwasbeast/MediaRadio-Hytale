@@ -102,7 +102,7 @@ public class MediaPlaybackManager {
                 chunkDurationMs,
                 mediaInfo.title,
                 mediaInfo.artist,
-                mediaInfo.thumbnailUrl,
+                mediaInfo.thumbnailAssetPath,
                 mediaInfo.url,
                 mediaInfo.duration * 1000L);
         session.setLoopEnabled(loopPreferences.getOrDefault(playerId, false));
