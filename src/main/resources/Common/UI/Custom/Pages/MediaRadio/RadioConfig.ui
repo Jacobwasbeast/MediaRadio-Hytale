@@ -43,6 +43,15 @@ $C.@Container {
                     FontSize: 14
                 );
             }
+
+            FloatSlider #SeekSlider {
+                Anchor: (Top: 8, Width: 460, Height: 6);
+                Style: $C.@DefaultSliderStyle;
+                Min: 0;
+                Max: 100;
+                Step: 1;
+                Value: 0;
+            }
         }
 
         $C.@TextField #UrlInput {

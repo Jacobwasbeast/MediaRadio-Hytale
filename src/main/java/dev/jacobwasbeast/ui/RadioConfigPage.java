@@ -27,8 +27,11 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.RadioPageData> {
-    private static final long TIME_UPDATE_PERIOD_MS = 500;
+    private static final long TIME_UPDATE_PERIOD_MS = 1000;
     private static final Map<UUID, ScheduledFuture<?>> TIME_UPDATERS = new ConcurrentHashMap<>();
+    private static final Map<UUID, Long> LAST_TIME_SECONDS = new ConcurrentHashMap<>();
+    private static final long SEEK_DEBOUNCE_MS = 250;
+    private static final Map<UUID, ScrubState> SCRUB_STATES = new ConcurrentHashMap<>();
 
     private final PlayerRef playerRef;
 
@@ -50,11 +53,15 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
             commandBuilder.set("#PauseButton.Text", session.isPaused() ? "Resume" : "Pause");
             commandBuilder.set("#NowPlayingTime.Text", formatTime(session.getCurrentPositionMs()) + " / "
                     + formatTime(session.getTotalDurationMs()));
+            commandBuilder.set("#SeekSlider.Value", (int) (session.getProgress() * 100));
+            commandBuilder.set("#SeekSlider.Visible", true);
         } else {
             commandBuilder.set("#NowPlayingTitle.Text", "No Media Playing");
             commandBuilder.set("#NowPlayingArtist.Text", "");
             commandBuilder.set("#PauseButton.Text", "Pause");
             commandBuilder.set("#NowPlayingTime.Text", "0:00 / 0:00");
+            commandBuilder.set("#SeekSlider.Value", 0);
+            commandBuilder.set("#SeekSlider.Visible", false);
         }
 
         if (session != null && !session.getUrl().isEmpty()) {
@@ -110,15 +117,7 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
             }
         }
 
-        eventBuilder.addEventBinding(CustomUIEventBindingType.Activating, "#PlayButton",
-                EventData.of("@Url", "#UrlInput.Value"), false);
-
-        eventBuilder.addEventBinding(CustomUIEventBindingType.Activating, "#PauseButton",
-                EventData.of("Action", "Pause"), false);
-        eventBuilder.addEventBinding(CustomUIEventBindingType.Activating, "#StopButton",
-                EventData.of("Action", "Stop"), false);
-        eventBuilder.addEventBinding(CustomUIEventBindingType.Activating, "#CancelButton",
-                EventData.of("Action", "Cancel"), false);
+        addEventBindings(eventBuilder);
 
         startTimeUpdater();
     }
@@ -188,13 +187,9 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
         }
 
         if (data.seekValue != null) {
-            double seek = data.seekValue;
+            float seek = data.seekValue;
             data.seekValue = null; // Consume
-            store.getExternalData().getWorld().execute(() -> {
-                // Seek expects 0.0-1.0, slider is 0-100
-                MediaRadioPlugin.getInstance().getPlaybackManager().seek(playerRef, seek / 100.0, store);
-                player.sendMessage(Message.translation("Seeked to " + (int) seek + "%"));
-            });
+            handleSeekScrub(seek, store);
             return;
         }
 
@@ -272,14 +267,14 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                 .add()
                 .append(new KeyedCodec<>("Url", Codec.STRING), (d, v) -> d.directUrl = v, d -> d.directUrl)
                 .add()
-                .append(new KeyedCodec<>("SeekValue", Codec.DOUBLE), (d, v) -> d.seekValue = v, d -> d.seekValue)
+                .append(new KeyedCodec<>("@SeekValue", Codec.FLOAT), (d, v) -> d.seekValue = v, d -> d.seekValue)
                 .add()
                 .build();
 
         public String action;
         public String url;
         public String directUrl;
-        public Double seekValue;
+        public Float seekValue;
     }
 
     @Override
@@ -321,15 +316,98 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
         if (ref == null || !ref.isValid()) {
             return false;
         }
+        ScrubState scrubState = SCRUB_STATES.get(playerRef.getUuid());
+        if (scrubState != null && scrubState.isScrubbing) {
+            return true;
+        }
         var session = MediaRadioPlugin.getInstance().getPlaybackManager().getSession(playerRef.getUuid());
         UICommandBuilder commandBuilder = new UICommandBuilder();
+        UUID playerId = playerRef.getUuid();
         if (session != null && !session.isStopped()) {
+            long seconds = Math.max(0, session.getCurrentPositionMs() / 1000);
+            Long lastSeconds = LAST_TIME_SECONDS.get(playerId);
+            if (lastSeconds != null && lastSeconds == seconds) {
+                return true;
+            }
+            LAST_TIME_SECONDS.put(playerId, seconds);
             commandBuilder.set("#NowPlayingTime.Text", formatTime(session.getCurrentPositionMs()) + " / "
                     + formatTime(session.getTotalDurationMs()));
+            commandBuilder.set("#SeekSlider.Value", (int) (session.getProgress() * 100));
+            commandBuilder.set("#SeekSlider.Visible", true);
         } else {
+            LAST_TIME_SECONDS.remove(playerId);
             commandBuilder.set("#NowPlayingTime.Text", "0:00 / 0:00");
+            commandBuilder.set("#SeekSlider.Value", 0);
+            commandBuilder.set("#SeekSlider.Visible", false);
         }
-        sendUpdate(commandBuilder, false);
+        UIEventBuilder eventBuilder = new UIEventBuilder();
+        addEventBindings(eventBuilder);
+        sendUpdate(commandBuilder, eventBuilder, false);
         return true;
+    }
+
+    private void handleSeekScrub(float seekPercent, Store<EntityStore> store) {
+        var manager = MediaRadioPlugin.getInstance().getPlaybackManager();
+        var session = manager.getSession(playerRef.getUuid());
+        if (session == null || session.isStopped()) {
+            return;
+        }
+
+        UUID playerId = playerRef.getUuid();
+        ScrubState state = SCRUB_STATES.computeIfAbsent(playerId, key -> new ScrubState());
+        if (!state.isScrubbing) {
+            state.wasPlaying = session.isPlaying();
+            state.isScrubbing = true;
+            if (state.wasPlaying) {
+                manager.pauseByUser(playerRef);
+            }
+        }
+        state.lastPercent = seekPercent;
+
+        long previewMs = (long) (session.getTotalDurationMs() * (seekPercent / 100.0f));
+        UICommandBuilder commandBuilder = new UICommandBuilder();
+        commandBuilder.set("#NowPlayingTime.Text", formatTime(previewMs) + " / " + formatTime(session.getTotalDurationMs()));
+        commandBuilder.set("#SeekSlider.Value", (int) seekPercent);
+        UIEventBuilder eventBuilder = new UIEventBuilder();
+        addEventBindings(eventBuilder);
+        sendUpdate(commandBuilder, eventBuilder, false);
+
+        if (state.finalizeTask != null && !state.finalizeTask.isDone()) {
+            state.finalizeTask.cancel(false);
+        }
+        state.finalizeTask = HytaleServer.SCHEDULED_EXECUTOR.schedule(() -> {
+            store.getExternalData().getWorld().execute(() -> {
+                var freshSession = manager.getSession(playerId);
+                if (freshSession != null && !freshSession.isStopped()) {
+                    manager.seek(playerRef, state.lastPercent / 100.0, store);
+                    if (state.wasPlaying) {
+                        manager.resume(playerRef, store);
+                    }
+                }
+                state.isScrubbing = false;
+                state.wasPlaying = false;
+                state.finalizeTask = null;
+            });
+        }, SEEK_DEBOUNCE_MS, TimeUnit.MILLISECONDS);
+    }
+
+    private static final class ScrubState {
+        private boolean isScrubbing;
+        private boolean wasPlaying;
+        private double lastPercent;
+        private ScheduledFuture<?> finalizeTask;
+    }
+
+    private void addEventBindings(UIEventBuilder eventBuilder) {
+        eventBuilder.addEventBinding(CustomUIEventBindingType.Activating, "#PlayButton",
+                EventData.of("@Url", "#UrlInput.Value"), false);
+        eventBuilder.addEventBinding(CustomUIEventBindingType.Activating, "#PauseButton",
+                EventData.of("Action", "Pause"), false);
+        eventBuilder.addEventBinding(CustomUIEventBindingType.Activating, "#StopButton",
+                EventData.of("Action", "Stop"), false);
+        eventBuilder.addEventBinding(CustomUIEventBindingType.Activating, "#CancelButton",
+                EventData.of("Action", "Cancel"), false);
+        eventBuilder.addEventBinding(CustomUIEventBindingType.ValueChanged, "#SeekSlider",
+                EventData.of("@SeekValue", "#SeekSlider.Value"), false);
     }
 }
