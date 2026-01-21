@@ -1,0 +1,22 @@
+{
+    "Group": "Jacobwasbeast",
+    "Name": "media_radio",
+    "Version": "1.0.2",
+    "Description": "Use a radio to play Youtube videos, Twitch streams, and more around the world!",
+    "Authors": [
+        {
+            "Name": "Jacobwasbeast"
+        }
+    ],
+    "Website": "example.org",
+    "ServerVersion": "*",
+    "Dependencies": {
+        
+    },
+    "OptionalDependencies": {
+        
+    },
+    "DisabledByDefault": false,
+    "Main": "dev.jacobwasbeast.MediaRadioPlugin",
+    "IncludesAssetPack": true
+}

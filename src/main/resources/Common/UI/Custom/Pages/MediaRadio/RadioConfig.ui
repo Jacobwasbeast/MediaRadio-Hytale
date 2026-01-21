@@ -1,0 +1,100 @@
+$C = "../../Common.ui";
+
+$C.@PageOverlay {}
+
+$C.@Container {
+    Anchor: (Width: 500, Height: 700);
+
+    #Title {
+        Group {
+            $C.@Title {
+               @Text = %mediaRadio.customUI.title;
+            }
+        }
+    }
+
+    #Content {
+        LayoutMode: Top;
+
+        Group #NowPlaying {
+            LayoutMode: Top;
+            Padding: (Full: 10);
+
+            Label #NowPlayingTitle {
+                Text: "%mediaRadio.customUI.notPlaying";
+                Style: LabelStyle(
+                    TextColor: #FFFFFF,
+                    FontSize: 24
+                );
+            }
+
+            Label #NowPlayingArtist {
+                Text: "";
+                Style: LabelStyle(
+                    TextColor: #C8C8C8,
+                    FontSize: 18
+                );
+            }
+
+            Label #NowPlayingTime {
+                Text: "0:00 / 0:00";
+                Style: LabelStyle(
+                    TextColor: #96a9be,
+                    FontSize: 14
+                );
+            }
+        }
+
+        $C.@TextField #UrlInput {
+            @Anchor = (Left: 4, Bottom: 4);
+            PlaceholderText: %mediaRadio.customUI.urlPlaceholder;
+        }
+
+        Group {
+            LayoutMode: Left;
+            Anchor: (Top: 15, Height: 44);
+
+            $C.@TextButton #PlayButton {
+                Text: %mediaRadio.customUI.play;
+                FlexWeight: 1;
+            }
+
+            Group { Anchor: (Width: 5); }
+
+            $C.@TextButton #PauseButton {
+                Text: %mediaRadio.customUI.pause;
+                FlexWeight: 1;
+            }
+
+            Group { Anchor: (Width: 5); }
+
+            $C.@TextButton #StopButton {
+                Text: %mediaRadio.customUI.stop;
+                FlexWeight: 1;
+            }
+        }
+
+        Label {
+            Text: "Library";
+            Style: $C.@DefaultLabelStyle;
+        }
+
+        Group #LibraryList {
+            FlexWeight: 1;
+            LayoutMode: TopScrolling;
+            ScrollbarStyle: $C.@DefaultScrollbarStyle;
+        }
+
+        Group {
+            LayoutMode: Left;
+            Anchor: (Top: 15);
+
+            $C.@TextButton #CancelButton {
+                Text: %mediaRadio.customUI.close;
+                FlexWeight: 1;
+            }
+        }
+    }
+}
+
+$C.@BackButton {}

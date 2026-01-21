@@ -1,0 +1,66 @@
+{
+  "TranslationProperties": {
+    "Name": "mediaRadio.radio.name",
+    "Description": "mediaRadio.radio.description"
+  },
+  "InteractionConfig": {
+    "Priorities": {
+      "Secondary": {
+        "MainHand": 1,
+        "OffHand": -1
+      }
+    }
+  },
+  "IconProperties": {
+    "Scale": 0.4,
+    "Translation": [-25, -25],
+    "Rotation": [315, 270, 0]
+  },
+  "Category": "Blocks",
+  "ItemLevel": 1,
+  "MaxStack": 1,
+  "Icon": "Icons/ItemsGenerated/Radio.png",
+  "BlockType": {
+    "Material": "Solid",
+    "DrawType": "Cube",
+    "Textures": [
+      {
+        "All": "Blocks/MediaRadio/Radio.png",
+        "Weight": 1
+      }
+    ],
+    "ParticleColor": "#737055",
+    "BlockSoundSetId": "Wood",
+    "BlockBreakingDecalId": "Breaking_Decals_Wood",
+    "BlockParticleSetId": "Wood",
+    "Gathering": {
+      "Breaking": {
+        "GatherType": "Block"
+      }
+    },
+    "Flags": {
+      "IsUsable": true
+    }
+  },
+  "Utility": {
+    "Usable": true
+  },
+  "PlayerAnimationsId": "Item",
+  "ItemSoundSetId": "ISS_Blocks_Wood",
+  "Interactions": {
+    "Primary": "Block_Primary",
+    "Secondary": {
+      "Interactions": [
+        {
+          "Type": "OpenCustomUI",
+          "Page": {
+            "Id": "MediaRadio_Config"
+          }
+        }
+      ]
+    }
+  },
+  "Tags": {
+    "Type": ["Block"]
+  }
+}
