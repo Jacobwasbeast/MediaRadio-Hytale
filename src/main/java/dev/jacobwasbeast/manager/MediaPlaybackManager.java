@@ -25,6 +25,7 @@ public class MediaPlaybackManager {
     private final MediaRadioPlugin plugin;
     private final Map<String, PlaybackSession> activeBlockSessions = new ConcurrentHashMap<>();
     private final Map<UUID, PlaybackSession> activePlayerSessions = new ConcurrentHashMap<>();
+    private final Map<UUID, Boolean> loopPreferences = new ConcurrentHashMap<>();
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
     private static final int MAX_MISSING_ASSET_RETRIES = 10;
     private static final long MISSING_ASSET_RETRY_DELAY_MS = 500;
@@ -104,6 +105,7 @@ public class MediaPlaybackManager {
                 mediaInfo.thumbnailUrl,
                 mediaInfo.url,
                 mediaInfo.duration * 1000L);
+        session.setLoopEnabled(loopPreferences.getOrDefault(playerId, false));
         activePlayerSessions.put(playerId, session);
 
         session.play();
@@ -193,6 +195,21 @@ public class MediaPlaybackManager {
         if (session != null) {
             session.stop();
             plugin.getLogger().at(Level.INFO).log("Stopped playback for player %s", playerId);
+        }
+    }
+
+    public boolean isLoopEnabled(UUID playerId) {
+        return loopPreferences.getOrDefault(playerId, false);
+    }
+
+    public void setLoopEnabled(UUID playerId, boolean enabled) {
+        if (playerId == null) {
+            return;
+        }
+        loopPreferences.put(playerId, enabled);
+        PlaybackSession session = activePlayerSessions.get(playerId);
+        if (session != null) {
+            session.setLoopEnabled(enabled);
         }
     }
 

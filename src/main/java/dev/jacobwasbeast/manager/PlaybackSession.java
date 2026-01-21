@@ -31,6 +31,7 @@ public class PlaybackSession {
     private boolean isPaused = false;
     private boolean pausedByUser = false;
     private boolean isStopped = true;
+    private boolean loopEnabled = false;
     private ScheduledFuture<?> scheduledNextChunk;
 
     public PlaybackSession(String trackId, Vector3i blockPosition, int totalChunks, int chunkDurationMs) {
@@ -120,6 +121,14 @@ public class PlaybackSession {
 
     public boolean isPausedByUser() {
         return pausedByUser;
+    }
+
+    public boolean isLoopEnabled() {
+        return loopEnabled;
+    }
+
+    public void setLoopEnabled(boolean loopEnabled) {
+        this.loopEnabled = loopEnabled;
     }
 
     public boolean isStopped() {
@@ -256,6 +265,12 @@ public class PlaybackSession {
     public boolean advanceChunk() {
         if (currentChunk < totalChunks - 1) {
             currentChunk++;
+            currentChunkStartMs = System.currentTimeMillis();
+            pausedOffsetMs = 0;
+            return true;
+        }
+        if (loopEnabled && totalChunks > 0) {
+            currentChunk = 0;
             currentChunkStartMs = System.currentTimeMillis();
             pausedOffsetMs = 0;
             return true;

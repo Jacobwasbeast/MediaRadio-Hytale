@@ -81,6 +81,14 @@ $C.@Container {
                 Text: %mediaRadio.customUI.stop;
                 FlexWeight: 1;
             }
+
+            Group { Anchor: (Width: 5); }
+
+            $C.@SmallSecondaryTextButton #LoopButton {
+                Text: %mediaRadio.customUI.loop;
+                Anchor: (Width: 120);
+                Padding: (Horizontal: 8);
+            }
         }
 
         Label {

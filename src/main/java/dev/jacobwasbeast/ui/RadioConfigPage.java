@@ -55,6 +55,7 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                     + formatTime(session.getTotalDurationMs()));
             commandBuilder.set("#SeekSlider.Value", (int) (session.getProgress() * 100));
             commandBuilder.set("#SeekSlider.Visible", true);
+            commandBuilder.set("#LoopButton.Text", formatLoopLabel(session.isLoopEnabled()));
         } else {
             commandBuilder.set("#NowPlayingTitle.Text", "No Media Playing");
             commandBuilder.set("#NowPlayingArtist.Text", "");
@@ -62,6 +63,8 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
             commandBuilder.set("#NowPlayingTime.Text", "0:00 / 0:00");
             commandBuilder.set("#SeekSlider.Value", 0);
             commandBuilder.set("#SeekSlider.Visible", false);
+            var manager = MediaRadioPlugin.getInstance().getPlaybackManager();
+            commandBuilder.set("#LoopButton.Text", formatLoopLabel(manager.isLoopEnabled(playerRef.getUuid())));
         }
 
         if (session != null && !session.getUrl().isEmpty()) {
@@ -132,6 +135,15 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
 
         if ("Cancel".equals(data.action)) {
             player.getPageManager().setPage(ref, store, Page.None);
+            return;
+        } else if ("Loop".equals(data.action)) {
+            data.action = null;
+            store.getExternalData().getWorld().execute(() -> {
+                var manager = MediaRadioPlugin.getInstance().getPlaybackManager();
+                boolean enabled = !manager.isLoopEnabled(playerRef.getUuid());
+                manager.setLoopEnabled(playerRef.getUuid(), enabled);
+                player.getPageManager().openCustomPage(ref, store, new RadioConfigPage(playerRef));
+            });
             return;
         } else if ("Remove".equals(data.action)) {
             String removeUrl = data.url;
@@ -334,11 +346,14 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                     + formatTime(session.getTotalDurationMs()));
             commandBuilder.set("#SeekSlider.Value", (int) (session.getProgress() * 100));
             commandBuilder.set("#SeekSlider.Visible", true);
+            commandBuilder.set("#LoopButton.Text", formatLoopLabel(session.isLoopEnabled()));
         } else {
             LAST_TIME_SECONDS.remove(playerId);
             commandBuilder.set("#NowPlayingTime.Text", "0:00 / 0:00");
             commandBuilder.set("#SeekSlider.Value", 0);
             commandBuilder.set("#SeekSlider.Visible", false);
+            var manager = MediaRadioPlugin.getInstance().getPlaybackManager();
+            commandBuilder.set("#LoopButton.Text", formatLoopLabel(manager.isLoopEnabled(playerRef.getUuid())));
         }
         UIEventBuilder eventBuilder = new UIEventBuilder();
         addEventBindings(eventBuilder);
@@ -398,6 +413,11 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
         private ScheduledFuture<?> finalizeTask;
     }
 
+    private Message formatLoopLabel(boolean enabled) {
+        String key = enabled ? "mediaRadio.customUI.loopOnLabel" : "mediaRadio.customUI.loopOffLabel";
+        return Message.translation(key);
+    }
+
     private void addEventBindings(UIEventBuilder eventBuilder) {
         eventBuilder.addEventBinding(CustomUIEventBindingType.Activating, "#PlayButton",
                 EventData.of("@Url", "#UrlInput.Value"), false);
@@ -405,6 +425,8 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                 EventData.of("Action", "Pause"), false);
         eventBuilder.addEventBinding(CustomUIEventBindingType.Activating, "#StopButton",
                 EventData.of("Action", "Stop"), false);
+        eventBuilder.addEventBinding(CustomUIEventBindingType.Activating, "#LoopButton",
+                EventData.of("Action", "Loop"), false);
         eventBuilder.addEventBinding(CustomUIEventBindingType.Activating, "#CancelButton",
                 EventData.of("Action", "Cancel"), false);
         eventBuilder.addEventBinding(CustomUIEventBindingType.ValueChanged, "#SeekSlider",
