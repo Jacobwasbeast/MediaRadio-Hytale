@@ -21,19 +21,7 @@ public class RadioInteractionSystem extends EntityEventSystem<EntityStore, UseBl
     public void handle(int index, @Nonnull ArchetypeChunk<EntityStore> archetypeChunk,
             @Nonnull Store<EntityStore> store, @Nonnull CommandBuffer<EntityStore> commandBuffer,
             @Nonnull UseBlockEvent.Pre event) {
-        String blockId = event.getBlockType().getId();
-        System.out.println("[RadioInteractionSystem] Interaction with block: " + blockId);
-
-        if ("media_radio:radio".equals(blockId)) {
-            com.hypixel.hytale.component.Ref<EntityStore> ref = archetypeChunk.getReferenceTo(index);
-            Player player = store.getComponent(ref, Player.getComponentType());
-            PlayerRef playerRef = store.getComponent(ref, PlayerRef.getComponentType());
-
-            if (player != null && playerRef != null) {
-                player.getPageManager().openCustomPage(ref, store,
-                        new dev.jacobwasbeast.ui.RadioConfigPage(playerRef));
-            }
-        }
+        // TODO: Implement Radio Block
     }
 
     @Nonnull
