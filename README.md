@@ -21,7 +21,7 @@ style interface with play/pause/stop, seek, looping, and a per‑player library.
 
 ## Screenshots
 ![Radio in main hand](Screenshots/MainHand.png)
-![Radio in offhand](Screenshots/Offhand.png)
+![Radio in offhand](Screenshots/OffHand.png)
 ![Media radio UI](Screenshots/UI.png)
 
 ## Setup (Prebuilt)
