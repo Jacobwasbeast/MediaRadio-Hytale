@@ -227,7 +227,8 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
             url = data.directUrl;
         }
         if (url != null && !url.isEmpty()) {
-            final String finalUrl = url;
+            var mediaManager = MediaRadioPlugin.getInstance().getMediaManager();
+            final String finalUrl = mediaManager != null ? mediaManager.normalizeUrl(url) : url;
             data.url = null;
             data.directUrl = null;
             var library = MediaRadioPlugin.getInstance().getMediaLibrary();

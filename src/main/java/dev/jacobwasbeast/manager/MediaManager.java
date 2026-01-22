@@ -20,6 +20,8 @@ import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import java.util.Collections;
 import java.io.IOException;
 import java.io.Writer;
+import java.net.URI;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -138,7 +140,8 @@ public class MediaManager {
     }
 
     public CompletableFuture<MediaInfo> requestMedia(String url) {
-        String trackId = getTrackIdForUrl(url);
+        String normalizedUrl = normalizeUrl(url);
+        String trackId = getTrackIdForUrl(normalizedUrl);
 
         // If in library, we might have metadata (TODO: Store metadata in
         // mediaLibrary.json too)
@@ -146,21 +149,21 @@ public class MediaManager {
         // just return basic info
         // Let's rely on re-fetching metadata for freshness or assume basic if failed
 
-        plugin.getLogger().at(Level.INFO).log("Processing media request: %s -> %s", url, trackId);
+        plugin.getLogger().at(Level.INFO).log("Processing media request: %s -> %s", normalizedUrl, trackId);
         return inFlightRequests.computeIfAbsent(trackId, key -> CompletableFuture.supplyAsync(() -> {
             try {
                 // 1. Fetch Metadata first
-                MediaInfo metadata = resolveMetadata(url, trackId);
+                MediaInfo metadata = resolveMetadata(normalizedUrl, trackId);
 
                 // 2. Check if we need to download audio
                 // (Simple check: does the splits exist? For now, re-download/check)
                 if (!Files.exists(commonAudioPath.resolve(trackId + ".ogg"))) {
-                    downloadMedia(url, trackId);
+                    downloadMedia(normalizedUrl, trackId);
                     int chunkCount = splitAudio(trackId, 1);
                     registerCommonSoundAssets(trackId, chunkCount);
                     createSoundEvents(trackId, chunkCount);
                     loadSoundEventAssets(trackId, chunkCount);
-                    updateLibrary(trackId, url, chunkCount);
+                    updateLibrary(trackId, normalizedUrl, chunkCount);
                 }
 
                 int chunkCount = resolveChunkCount(trackId);
@@ -170,10 +173,10 @@ public class MediaManager {
                         registerCommonSoundAssets(trackId, chunkCount);
                         createSoundEvents(trackId, chunkCount);
                         loadSoundEventAssets(trackId, chunkCount);
-                        updateLibrary(trackId, url, chunkCount);
+                        updateLibrary(trackId, normalizedUrl, chunkCount);
                     }
                 } else if (!mediaLibrary.containsKey(trackId)) {
-                    updateLibrary(trackId, url, chunkCount);
+                    updateLibrary(trackId, normalizedUrl, chunkCount);
                 }
 
                 if (chunkCount > 0) {
@@ -186,8 +189,8 @@ public class MediaManager {
                         loadSoundEventAssets(trackId, chunkCount);
                     }
                 }
-                String thumbnailAssetPath = ensureThumbnail(url, trackId);
-                return new MediaInfo(trackId, url, metadata.title, metadata.artist, metadata.thumbnailUrl,
+                String thumbnailAssetPath = ensureThumbnail(normalizedUrl, trackId);
+                return new MediaInfo(trackId, normalizedUrl, metadata.title, metadata.artist, metadata.thumbnailUrl,
                         metadata.duration, chunkCount, thumbnailAssetPath);
             } catch (Exception e) {
                 String message = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
@@ -463,10 +466,11 @@ public class MediaManager {
     }
 
     public String getTrackIdForUrl(String url) {
+        String normalizedUrl = normalizeUrl(url);
         String hash;
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] encodedhash = digest.digest(url.getBytes(StandardCharsets.UTF_8));
+            byte[] encodedhash = digest.digest(normalizedUrl.getBytes(StandardCharsets.UTF_8));
             StringBuilder hexString = new StringBuilder(2 * encodedhash.length);
             for (int i = 0; i < encodedhash.length; i++) {
                 String hex = Integer.toHexString(0xff & encodedhash[i]);
@@ -481,6 +485,83 @@ public class MediaManager {
         }
 
         return "Track_" + hash;
+    }
+
+    public String normalizeUrl(String url) {
+        if (url == null) {
+            return "";
+        }
+        String trimmed = url.trim();
+        if (trimmed.isEmpty()) {
+            return trimmed;
+        }
+        try {
+            URI uri = new URI(trimmed);
+            String host = uri.getHost();
+            if (host == null) {
+                return trimmed;
+            }
+            String lowerHost = host.toLowerCase();
+            String path = uri.getPath() != null ? uri.getPath() : "";
+            if (lowerHost.contains("youtube.com")) {
+                if ("/watch".equals(path)) {
+                    String videoId = getQueryParam(uri.getRawQuery(), "v");
+                    if (!videoId.isEmpty()) {
+                        return "https://youtu.be/" + videoId;
+                    }
+                } else if (path.startsWith("/shorts/")) {
+                    String videoId = extractPathSegment(path, "/shorts/");
+                    if (!videoId.isEmpty()) {
+                        return "https://youtu.be/" + videoId;
+                    }
+                } else if (path.startsWith("/embed/")) {
+                    String videoId = extractPathSegment(path, "/embed/");
+                    if (!videoId.isEmpty()) {
+                        return "https://youtu.be/" + videoId;
+                    }
+                }
+            } else if (lowerHost.contains("youtu.be")) {
+                String videoId = extractPathSegment(path, "/");
+                if (!videoId.isEmpty()) {
+                    return "https://youtu.be/" + videoId;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return trimmed;
+    }
+
+    private String extractPathSegment(String path, String prefix) {
+        if (path == null) {
+            return "";
+        }
+        String trimmed = path.startsWith(prefix) ? path.substring(prefix.length()) : path;
+        int slash = trimmed.indexOf('/');
+        if (slash >= 0) {
+            trimmed = trimmed.substring(0, slash);
+        }
+        return trimmed;
+    }
+
+    private String getQueryParam(String rawQuery, String key) {
+        if (rawQuery == null || rawQuery.isEmpty()) {
+            return "";
+        }
+        String[] parts = rawQuery.split("&");
+        for (String part : parts) {
+            int eq = part.indexOf('=');
+            String k = eq >= 0 ? part.substring(0, eq) : part;
+            if (!key.equals(k)) {
+                continue;
+            }
+            String value = eq >= 0 ? part.substring(eq + 1) : "";
+            try {
+                return URLDecoder.decode(value, StandardCharsets.UTF_8);
+            } catch (Exception ignored) {
+                return value;
+            }
+        }
+        return "";
     }
 
     public String getThumbnailAssetPath(String trackId) {
