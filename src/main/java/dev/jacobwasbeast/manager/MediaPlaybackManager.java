@@ -26,6 +26,8 @@ public class MediaPlaybackManager {
     private final Map<String, PlaybackSession> activeBlockSessions = new ConcurrentHashMap<>();
     private final Map<UUID, PlaybackSession> activePlayerSessions = new ConcurrentHashMap<>();
     private final Map<UUID, Boolean> loopPreferences = new ConcurrentHashMap<>();
+    private final Map<UUID, Float> volumePreferences = new ConcurrentHashMap<>();
+    private static final float MAX_VOLUME = 5.0f;
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
     private static final int MAX_MISSING_ASSET_RETRIES = 10;
     private static final long MISSING_ASSET_RETRY_DELAY_MS = 500;
@@ -213,6 +215,30 @@ public class MediaPlaybackManager {
         }
     }
 
+    public float getVolume(UUID playerId) {
+        if (playerId == null) {
+            return 1.0f;
+        }
+        return volumePreferences.getOrDefault(playerId, 1.0f);
+    }
+
+    public void setVolume(UUID playerId, float volume) {
+        if (playerId == null) {
+            return;
+        }
+        float clamped = Math.max(0.0f, Math.min(MAX_VOLUME, volume));
+        volumePreferences.put(playerId, clamped);
+    }
+
+    public float setVolumePercent(UUID playerId, float percent) {
+        if (playerId == null) {
+            return 100.0f;
+        }
+        float clampedPercent = Math.max(0.0f, Math.min(MAX_VOLUME * 100.0f, percent));
+        setVolume(playerId, clampedPercent / 100.0f);
+        return clampedPercent;
+    }
+
     /**
      * Seek to a position (0.0 to 1.0)
      */
@@ -308,7 +334,8 @@ public class MediaPlaybackManager {
                 return;
             }
 
-            SoundUtil.playSoundEvent2dToPlayer(playerRef, soundEventIndex, SoundCategory.Music);
+            float volume = getVolume(playerRef.getUuid());
+            SoundUtil.playSoundEvent2dToPlayer(playerRef, soundEventIndex, SoundCategory.Music, volume, 1.0f);
             plugin.getLogger().at(Level.INFO).log("Playing chunk %d/%d for %s: %s",
                     session.getCurrentChunk() + 1, session.getTotalChunks(), playerRef.getUsername(), chunkTrackId);
         } else {

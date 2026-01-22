@@ -32,6 +32,7 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
     private static final Map<UUID, Long> LAST_TIME_SECONDS = new ConcurrentHashMap<>();
     private static final long SEEK_DEBOUNCE_MS = 250;
     private static final Map<UUID, ScrubState> SCRUB_STATES = new ConcurrentHashMap<>();
+    private static final int VOLUME_STEP_PERCENT = 10;
 
     private final PlayerRef playerRef;
 
@@ -83,6 +84,11 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
             commandBuilder.set("#LoopButton.Text", formatLoopLabel(manager.isLoopEnabled(playerRef.getUuid())));
             commandBuilder.set("#NowPlayingThumb.Visible", false);
         }
+
+        var playbackManager = MediaRadioPlugin.getInstance().getPlaybackManager();
+        float volume = playbackManager.getVolume(playerRef.getUuid());
+        int volumePercent = Math.round(volume * 100.0f);
+        commandBuilder.set("#VolumeInput.Value", String.valueOf(volumePercent));
 
         if (session != null && !session.getUrl().isEmpty()) {
             commandBuilder.set("#UrlInput.Value", session.getUrl());
@@ -222,6 +228,41 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
             return;
         }
 
+        if ("VolumeUp".equals(data.action) || "VolumeDown".equals(data.action)) {
+            boolean up = "VolumeUp".equals(data.action);
+            data.action = null;
+            store.getExternalData().getWorld().execute(() -> {
+                var manager = MediaRadioPlugin.getInstance().getPlaybackManager();
+                float current = manager.getVolume(playerRef.getUuid()) * 100.0f;
+                float next = current + (up ? VOLUME_STEP_PERCENT : -VOLUME_STEP_PERCENT);
+                float clamped = manager.setVolumePercent(playerRef.getUuid(), next);
+                UICommandBuilder commandBuilder = new UICommandBuilder();
+                commandBuilder.set("#VolumeInput.Value", String.valueOf(Math.round(clamped)));
+                UIEventBuilder eventBuilder = new UIEventBuilder();
+                addEventBindings(eventBuilder);
+                sendUpdate(commandBuilder, eventBuilder, false);
+            });
+            return;
+        }
+
+        if (data.volumeText != null) {
+            String volumeText = data.volumeText;
+            data.volumeText = null;
+            float percent = parseVolumePercent(volumeText);
+            if (percent >= 0.0f) {
+                store.getExternalData().getWorld().execute(() -> {
+                    var manager = MediaRadioPlugin.getInstance().getPlaybackManager();
+                    float clamped = manager.setVolumePercent(playerRef.getUuid(), percent);
+                    UICommandBuilder commandBuilder = new UICommandBuilder();
+                    commandBuilder.set("#VolumeInput.Value", String.valueOf(Math.round(clamped)));
+                    UIEventBuilder eventBuilder = new UIEventBuilder();
+                    addEventBindings(eventBuilder);
+                    sendUpdate(commandBuilder, eventBuilder, false);
+                });
+            }
+            return;
+        }
+
         String url = data.url;
         if (url == null || url.isEmpty()) {
             url = data.directUrl;
@@ -304,12 +345,15 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                 .add()
                 .append(new KeyedCodec<>("@SeekValue", Codec.FLOAT), (d, v) -> d.seekValue = v, d -> d.seekValue)
                 .add()
+                .append(new KeyedCodec<>("@VolumeText", Codec.STRING), (d, v) -> d.volumeText = v, d -> d.volumeText)
+                .add()
                 .build();
 
         public String action;
         public String url;
         public String directUrl;
         public Float seekValue;
+        public String volumeText;
     }
 
     @Override
@@ -395,6 +439,10 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
             commandBuilder.set("#LoopButton.Text", formatLoopLabel(manager.isLoopEnabled(playerRef.getUuid())));
             commandBuilder.set("#NowPlayingThumb.Visible", false);
         }
+        var playbackManager = MediaRadioPlugin.getInstance().getPlaybackManager();
+        float volume = playbackManager.getVolume(playerRef.getUuid());
+        int volumePercent = Math.round(volume * 100.0f);
+        commandBuilder.set("#VolumeInput.Value", String.valueOf(volumePercent));
         UIEventBuilder eventBuilder = new UIEventBuilder();
         addEventBindings(eventBuilder);
         sendUpdate(commandBuilder, eventBuilder, false);
@@ -483,5 +531,26 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                 EventData.of("Action", "Cancel"), false);
         eventBuilder.addEventBinding(CustomUIEventBindingType.ValueChanged, "#SeekSlider",
                 EventData.of("@SeekValue", "#SeekSlider.Value"), false);
+        eventBuilder.addEventBinding(CustomUIEventBindingType.ValueChanged, "#VolumeInput",
+                EventData.of("@VolumeText", "#VolumeInput.Value"), false);
+        eventBuilder.addEventBinding(CustomUIEventBindingType.Activating, "#VolumeUp",
+                EventData.of("Action", "VolumeUp"), false);
+        eventBuilder.addEventBinding(CustomUIEventBindingType.Activating, "#VolumeDown",
+                EventData.of("Action", "VolumeDown"), false);
+    }
+
+    private float parseVolumePercent(String text) {
+        if (text == null) {
+            return -1.0f;
+        }
+        String trimmed = text.trim();
+        if (trimmed.isEmpty()) {
+            return -1.0f;
+        }
+        try {
+            return Float.parseFloat(trimmed);
+        } catch (NumberFormatException e) {
+            return -1.0f;
+        }
     }
 }
