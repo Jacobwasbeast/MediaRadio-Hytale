@@ -43,21 +43,22 @@ public class MediaManager {
     private final Path serverSoundEventsPath;
     private final Path thumbnailPath;
     private final Path libraryFile;
+    private String ytDlpCommand = "yt-dlp";
 
     private final Map<String, MediaEntry> mediaLibrary = new HashMap<>();
     private final Map<String, CompletableFuture<MediaInfo>> inFlightRequests = new ConcurrentHashMap<>();
 
     public MediaManager(MediaRadioPlugin plugin) {
         this.plugin = plugin;
-        // Server working directory is already "run/", so don't duplicate it
-        this.runtimeAssetsPath = Paths.get("media_radio_assets").toAbsolutePath();
+        Path baseDir = MediaRadioPlugin.resolveRuntimeBasePath();
+        this.runtimeAssetsPath = baseDir.resolve("media_radio_assets").toAbsolutePath();
         // Pack structure with Common/Server separation matching Vanilla
         // Audio files: Common/Sounds/media_radio/<path>
         this.commonAudioPath = runtimeAssetsPath.resolve("Common/Sounds/media_radio");
         // SoundEvent definitions: Server/Audio/SoundEvents/
         this.serverSoundEventsPath = runtimeAssetsPath.resolve("Server/Audio/SoundEvents");
         this.thumbnailPath = runtimeAssetsPath.resolve("Common/UI/Custom/Pages/MediaRadio/Thumbs");
-        this.libraryFile = Paths.get("media_library.json").toAbsolutePath();
+        this.libraryFile = resolveLibraryFile(baseDir);
     }
 
     public void init() {
@@ -65,6 +66,7 @@ public class MediaManager {
             ensureDirectories();
             loadLibrary();
             registerRuntimePack();
+            logExternalToolStatus();
             plugin.getLogger().at(Level.INFO).log("MediaManager init completed successfully.");
         } catch (Exception e) {
             plugin.getLogger().at(Level.SEVERE).withCause(e).log("Failed to initialize MediaManager");
@@ -76,6 +78,24 @@ public class MediaManager {
         Files.createDirectories(serverSoundEventsPath);
         Files.createDirectories(thumbnailPath);
         plugin.getLogger().at(Level.INFO).log("Ensured directories exist at: %s", runtimeAssetsPath);
+    }
+
+    private Path resolveLibraryFile(Path baseDir) {
+        Path target = baseDir.resolve("media_library.json").toAbsolutePath();
+        Path legacy = Paths.get("media_library.json").toAbsolutePath();
+        if (!target.equals(legacy) && Files.exists(legacy) && !Files.exists(target)) {
+            try {
+                Files.createDirectories(target.getParent());
+                Files.move(legacy, target);
+                plugin.getLogger().at(Level.INFO).log("Migrated media library to %s", target);
+                return target;
+            } catch (IOException e) {
+                plugin.getLogger().at(Level.WARNING).withCause(e)
+                        .log("Failed to migrate media library, using legacy path %s", legacy);
+                return legacy;
+            }
+        }
+        return target;
     }
 
     private void registerRuntimePack() {
@@ -170,7 +190,8 @@ public class MediaManager {
                 return new MediaInfo(trackId, url, metadata.title, metadata.artist, metadata.thumbnailUrl,
                         metadata.duration, chunkCount, thumbnailAssetPath);
             } catch (Exception e) {
-                plugin.getLogger().at(Level.SEVERE).withCause(e).log("Failed to process media request");
+                String message = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                plugin.getLogger().at(Level.SEVERE).withCause(e).log("Failed to process media request: %s", message);
                 throw new RuntimeException(e);
             }
         }).whenComplete((info, err) -> inFlightRequests.remove(trackId)));
@@ -178,12 +199,17 @@ public class MediaManager {
 
     private MediaInfo resolveMetadata(String url, String trackId) throws Exception {
         ProcessBuilder pb = new ProcessBuilder(
-                "yt-dlp",
+                getYtDlpCommand(),
                 "--dump-json",
                 "--no-playlist",
                 url);
 
-        Process process = pb.start();
+        Process process;
+        try {
+            process = pb.start();
+        } catch (IOException e) {
+            throw new RuntimeException("yt-dlp not available for metadata fetch. Is it installed and on PATH?", e);
+        }
         StringBuilder jsonOutput = new StringBuilder();
         try (java.util.Scanner s = new java.util.Scanner(process.getInputStream())) {
             while (s.hasNextLine()) {
@@ -214,7 +240,7 @@ public class MediaManager {
         // Command: yt-dlp -x --audio-format vorbis --audio-quality 0 -o "trackId" "url"
         // yt-dlp will create "trackId.ogg" after audio extraction
         ProcessBuilder pb = new ProcessBuilder(
-                "yt-dlp",
+                getYtDlpCommand(),
                 "-x",
                 "--audio-format", "vorbis",
                 "--audio-quality", "0",
@@ -222,7 +248,12 @@ public class MediaManager {
                 url);
 
         pb.redirectErrorStream(true);
-        Process process = pb.start();
+        Process process;
+        try {
+            process = pb.start();
+        } catch (IOException e) {
+            throw new RuntimeException("yt-dlp not available for media download. Is it installed and on PATH?", e);
+        }
 
         // Read output to log
         try (java.util.Scanner s = new java.util.Scanner(process.getInputStream()).useDelimiter("\\A")) {
@@ -258,7 +289,12 @@ public class MediaManager {
                 outputPattern);
 
         pb.redirectErrorStream(true);
-        Process process = pb.start();
+        Process process;
+        try {
+            process = pb.start();
+        } catch (IOException e) {
+            throw new RuntimeException("ffmpeg not available for audio split. Is it installed and on PATH?", e);
+        }
 
         // Read output
         try (java.util.Scanner s = new java.util.Scanner(process.getInputStream()).useDelimiter("\\A")) {
@@ -497,13 +533,20 @@ public class MediaManager {
 
         try {
             ProcessBuilder pb = new ProcessBuilder(
-                    "yt-dlp",
+                    getYtDlpCommand(),
                     "--write-thumbnail",
                     "--skip-download",
                     "-o", thumbnailPath.resolve(trackId).toString(),
                     url);
             pb.redirectErrorStream(true);
-            Process process = pb.start();
+            Process process;
+            try {
+                process = pb.start();
+            } catch (IOException e) {
+                plugin.getLogger().at(Level.WARNING).withCause(e)
+                        .log("yt-dlp not available for thumbnail download.");
+                return "";
+            }
 
             try (java.util.Scanner s = new java.util.Scanner(process.getInputStream()).useDelimiter("\\A")) {
                 while (s.hasNext()) {
@@ -530,7 +573,14 @@ public class MediaManager {
                         "-i", downloaded.toString(),
                         pngPath.toString());
                 ffmpeg.redirectErrorStream(true);
-                Process ffmpegProcess = ffmpeg.start();
+                Process ffmpegProcess;
+                try {
+                    ffmpegProcess = ffmpeg.start();
+                } catch (IOException e) {
+                    plugin.getLogger().at(Level.WARNING).withCause(e)
+                            .log("ffmpeg not available for thumbnail conversion.");
+                    return "";
+                }
                 try (java.util.Scanner s = new java.util.Scanner(ffmpegProcess.getInputStream()).useDelimiter("\\A")) {
                     while (s.hasNext()) {
                         s.next();
@@ -696,6 +746,125 @@ public class MediaManager {
             Files.deleteIfExists(path);
         } catch (IOException e) {
             plugin.getLogger().at(Level.WARNING).withCause(e).log("Failed to delete file %s", path);
+        }
+    }
+
+    private void logExternalToolStatus() {
+        logEnvironmentDiagnostics();
+        ensureYtDlpAvailable();
+        logToolStatus(getYtDlpCommand(), "--version");
+        logToolStatus("ffmpeg", "-version");
+    }
+
+    private void logToolStatus(String tool, String versionArg) {
+        ProcessBuilder pb = new ProcessBuilder(tool, versionArg);
+        pb.redirectErrorStream(true);
+        try {
+            Process process = pb.start();
+            String firstLine = "";
+            try (java.util.Scanner s = new java.util.Scanner(process.getInputStream())) {
+                if (s.hasNextLine()) {
+                    firstLine = s.nextLine();
+                }
+            }
+            int exitCode = process.waitFor();
+            if (exitCode == 0) {
+                plugin.getLogger().at(Level.INFO).log("%s available: %s", tool, firstLine.isEmpty() ? "ok" : firstLine);
+            } else {
+                plugin.getLogger().at(Level.WARNING).log("%s returned exit %d (%s)", tool, exitCode,
+                        firstLine.isEmpty() ? "no output" : firstLine);
+            }
+        } catch (IOException e) {
+            plugin.getLogger().at(Level.WARNING).withCause(e).log("%s not available on PATH.", tool);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            plugin.getLogger().at(Level.WARNING).withCause(e).log("Interrupted while checking %s", tool);
+        }
+    }
+
+    private void ensureYtDlpAvailable() {
+        if (isToolAvailable("yt-dlp", "--version")) {
+            ytDlpCommand = "yt-dlp";
+            return;
+        }
+        Path existing = runtimeAssetsPath.resolve("bin").resolve(resolveYtDlpAssetName());
+        if (Files.exists(existing)) {
+            ytDlpCommand = existing.toString();
+            return;
+        }
+        try {
+            Path binDir = runtimeAssetsPath.resolve("bin");
+            Files.createDirectories(binDir);
+            String assetName = resolveYtDlpAssetName();
+            if (assetName == null) {
+                plugin.getLogger().at(Level.WARNING).log("Unsupported OS for yt-dlp auto-download.");
+                return;
+            }
+            Path target = binDir.resolve(assetName);
+            String url = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/" + assetName;
+            plugin.getLogger().at(Level.INFO).log("yt-dlp not found. Attempting download from %s", url);
+            downloadToFile(url, target);
+            if (!isWindows()) {
+                target.toFile().setExecutable(true, false);
+            }
+            ytDlpCommand = target.toString();
+            plugin.getLogger().at(Level.INFO).log("yt-dlp downloaded to %s", target);
+        } catch (Exception e) {
+            plugin.getLogger().at(Level.WARNING).withCause(e).log("Failed to auto-download yt-dlp.");
+        }
+    }
+
+    private boolean isToolAvailable(String tool, String versionArg) {
+        ProcessBuilder pb = new ProcessBuilder(tool, versionArg);
+        pb.redirectErrorStream(true);
+        try {
+            Process process = pb.start();
+            process.waitFor();
+            return process.exitValue() == 0;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private String getYtDlpCommand() {
+        return ytDlpCommand != null && !ytDlpCommand.isEmpty() ? ytDlpCommand : "yt-dlp";
+    }
+
+    private String resolveYtDlpAssetName() {
+        if (isWindows()) {
+            return "yt-dlp.exe";
+        }
+        if (isMac()) {
+            return "yt-dlp_macos";
+        }
+        return "yt-dlp";
+    }
+
+    private boolean isWindows() {
+        String os = System.getProperty("os.name", "").toLowerCase();
+        return os.contains("win");
+    }
+
+    private boolean isMac() {
+        String os = System.getProperty("os.name", "").toLowerCase();
+        return os.contains("mac");
+    }
+
+    private void downloadToFile(String url, Path target) throws IOException {
+        try (java.io.InputStream in = new java.net.URL(url).openStream()) {
+            Files.copy(in, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    private void logEnvironmentDiagnostics() {
+        String cwd = Paths.get("").toAbsolutePath().toString();
+        String runtimeBase = MediaRadioPlugin.resolveRuntimeBasePath().toString();
+        String pathEnv = System.getenv("PATH");
+        plugin.getLogger().at(Level.INFO).log("MediaRadio env: cwd=%s runtimeBase=%s", cwd, runtimeBase);
+        if (pathEnv != null && !pathEnv.isEmpty()) {
+            plugin.getLogger().at(Level.INFO).log("MediaRadio env: PATH=%s", pathEnv);
+        } else {
+            plugin.getLogger().at(Level.INFO).log("MediaRadio env: PATH is empty or unset");
         }
     }
 

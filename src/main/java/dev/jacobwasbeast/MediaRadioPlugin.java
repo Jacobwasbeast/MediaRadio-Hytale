@@ -5,6 +5,9 @@ import com.hypixel.hytale.server.core.plugin.JavaPluginInit;
 import com.hypixel.hytale.server.core.modules.interaction.interaction.config.server.OpenCustomUIInteraction;
 import dev.jacobwasbeast.manager.MediaManager;
 import dev.jacobwasbeast.ui.RadioConfigSupplier;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.logging.Level;
 import javax.annotation.Nonnull;
 
@@ -125,5 +128,18 @@ public class MediaRadioPlugin extends JavaPlugin {
 
     public dev.jacobwasbeast.manager.MediaPlaybackManager getPlaybackManager() {
         return playbackManager;
+    }
+
+    public static Path resolveRuntimeBasePath() {
+        Path cwd = Paths.get("").toAbsolutePath();
+        Path cwdName = cwd.getFileName();
+        if (cwdName != null && "run".equalsIgnoreCase(cwdName.toString())) {
+            return cwd;
+        }
+        Path runDir = cwd.resolve("run");
+        if (Files.isDirectory(runDir)) {
+            return runDir.toAbsolutePath();
+        }
+        return cwd;
     }
 }

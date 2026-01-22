@@ -10,6 +10,8 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.Type;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -25,7 +27,7 @@ public class MediaLibrary {
 
     public MediaLibrary(MediaRadioPlugin plugin) {
         this.plugin = plugin;
-        this.libraryFile = new File("saved_songs.json");
+        this.libraryFile = resolveLibraryFile();
         this.gson = new GsonBuilder().setPrettyPrinting().create();
         this.songsByPlayer = new HashMap<>();
         load();
@@ -53,9 +55,6 @@ public class MediaLibrary {
     }
 
     public void save() {
-        // Ensure directory exists - technically getDataFolder might be elusive in dev
-        // env, but let's try
-        // Ensure directory exists if applicable
         if (libraryFile.getParentFile() != null && !libraryFile.getParentFile().exists()) {
             libraryFile.getParentFile().mkdirs();
         }
@@ -65,6 +64,25 @@ public class MediaLibrary {
         } catch (IOException e) {
             plugin.getLogger().at(Level.SEVERE).withCause(e).log("Failed to save media library");
         }
+    }
+
+    private File resolveLibraryFile() {
+        Path baseDir = MediaRadioPlugin.resolveRuntimeBasePath();
+        Path target = baseDir.resolve("saved_songs.json").toAbsolutePath();
+        Path legacy = new File("saved_songs.json").toPath().toAbsolutePath();
+        if (!target.equals(legacy) && Files.exists(legacy) && !Files.exists(target)) {
+            try {
+                Files.createDirectories(target.getParent());
+                Files.move(legacy, target);
+                plugin.getLogger().at(Level.INFO).log("Migrated saved songs to %s", target);
+                return target.toFile();
+            } catch (IOException e) {
+                plugin.getLogger().at(Level.WARNING).withCause(e)
+                        .log("Failed to migrate saved songs, using legacy path %s", legacy);
+                return legacy.toFile();
+            }
+        }
+        return target.toFile();
     }
 
     public List<SavedSong> getSongsForPlayer(String playerId) {
