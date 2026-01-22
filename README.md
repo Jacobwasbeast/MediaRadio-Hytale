@@ -13,6 +13,7 @@ style interface with play/pause/stop, seek, looping, and a per‑player library.
 ## Notes
 - Requires `yt-dlp` and `ffmpeg` available on the server PATH.
 - This mod uses runtime asset packs under `run/media_radio_assets`.
+- For now, client-hosted/singleplayer worlds are not supported; the mod needs a dedicated server environment and access to external tools (sandboxing prevents this). Future support is planned.
 
 ## Recipe
 - Crafted at a Furniture Bench (Furniture Misc).
