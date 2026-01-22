@@ -271,7 +271,12 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                 store.getExternalData().getWorld().execute(() -> {
                     Player updatedPlayer = store.getComponent(ref, Player.getComponentType());
                     if (updatedPlayer != null) {
-                        updatedPlayer.sendMessage(Message.translation("Failed to load media. Removed from library."));
+                        String reason = extractFailureReason(e);
+                        if (reason.isEmpty()) {
+                            updatedPlayer.sendMessage(Message.translation("Failed to load media. Removed from library."));
+                        } else {
+                            updatedPlayer.sendMessage(Message.translation("Failed to load media: " + reason));
+                        }
                     }
                     if (library != null) {
                         String playerId = playerRef.getUuid().toString();
@@ -450,6 +455,18 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
     private Message formatLoopLabel(boolean enabled) {
         String key = enabled ? "mediaRadio.customUI.loopOnLabel" : "mediaRadio.customUI.loopOffLabel";
         return Message.translation(key);
+    }
+
+    private String extractFailureReason(Throwable error) {
+        if (error == null) {
+            return "";
+        }
+        Throwable cause = error;
+        while (cause.getCause() != null && cause.getCause() != cause) {
+            cause = cause.getCause();
+        }
+        String message = cause.getMessage();
+        return message != null ? message : "";
     }
 
     private void addEventBindings(UIEventBuilder eventBuilder) {

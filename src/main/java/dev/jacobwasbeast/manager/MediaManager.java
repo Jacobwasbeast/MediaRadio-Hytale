@@ -775,7 +775,8 @@ public class MediaManager {
                         firstLine.isEmpty() ? "no output" : firstLine);
             }
         } catch (IOException e) {
-            plugin.getLogger().at(Level.WARNING).withCause(e).log("%s not available on PATH.", tool);
+            plugin.getLogger().at(Level.WARNING).withCause(e).log(
+                    "Couldn't find %s on PATH. Did you add it to your system PATH? PATH=%s", tool, getPathEnv());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             plugin.getLogger().at(Level.WARNING).withCause(e).log("Interrupted while checking %s", tool);
@@ -859,13 +860,18 @@ public class MediaManager {
     private void logEnvironmentDiagnostics() {
         String cwd = Paths.get("").toAbsolutePath().toString();
         String runtimeBase = MediaRadioPlugin.resolveRuntimeBasePath().toString();
-        String pathEnv = System.getenv("PATH");
         plugin.getLogger().at(Level.INFO).log("MediaRadio env: cwd=%s runtimeBase=%s", cwd, runtimeBase);
+        String pathEnv = getPathEnv();
         if (pathEnv != null && !pathEnv.isEmpty()) {
             plugin.getLogger().at(Level.INFO).log("MediaRadio env: PATH=%s", pathEnv);
         } else {
             plugin.getLogger().at(Level.INFO).log("MediaRadio env: PATH is empty or unset");
         }
+    }
+
+    private String getPathEnv() {
+        String pathEnv = System.getenv("PATH");
+        return pathEnv != null ? pathEnv : "";
     }
 
     public static class MediaEntry {
