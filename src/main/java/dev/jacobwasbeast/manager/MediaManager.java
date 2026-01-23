@@ -189,7 +189,7 @@ public class MediaManager {
 
     private MediaInfo resolveMetadata(String url, String trackId) throws Exception {
         ProcessBuilder pb = new ProcessBuilder(
-                getYtDlpCommand(),
+                requireYtDlpCommand(),
                 "--dump-json",
                 "--no-playlist",
                 url);
@@ -198,7 +198,7 @@ public class MediaManager {
         try {
             process = pb.start();
         } catch (IOException e) {
-            throw new RuntimeException("yt-dlp not available for metadata fetch. Is it installed and on PATH?", e);
+            throw new RuntimeException("yt-dlp not available for metadata fetch. Run /setup_radio.", e);
         }
         StringBuilder jsonOutput = new StringBuilder();
         try (java.util.Scanner s = new java.util.Scanner(process.getInputStream())) {
@@ -230,7 +230,7 @@ public class MediaManager {
         // Command: yt-dlp -x --audio-format vorbis --audio-quality 0 -o "trackId" "url"
         // yt-dlp will create "trackId.ogg" after audio extraction
         ProcessBuilder pb = new ProcessBuilder(
-                getYtDlpCommand(),
+                requireYtDlpCommand(),
                 "-x",
                 "--audio-format", "vorbis",
                 "--audio-quality", "0",
@@ -242,7 +242,7 @@ public class MediaManager {
         try {
             process = pb.start();
         } catch (IOException e) {
-            throw new RuntimeException("yt-dlp not available for media download. Is it installed and on PATH?", e);
+            throw new RuntimeException("yt-dlp not available for media download. Run /setup_radio.", e);
         }
 
         // Read output to log
@@ -712,7 +712,7 @@ public class MediaManager {
 
         try {
             ProcessBuilder pb = new ProcessBuilder(
-                    getYtDlpCommand(),
+                    requireYtDlpCommand(),
                     "--write-thumbnail",
                     "--skip-download",
                     "-o", thumbnailPath.resolve(trackId).toString(),
@@ -723,7 +723,7 @@ public class MediaManager {
                 process = pb.start();
             } catch (IOException e) {
                 plugin.getLogger().at(Level.WARNING).withCause(e)
-                        .log("yt-dlp not available for thumbnail download.");
+                        .log("yt-dlp not available for thumbnail download. Run /setup_radio.");
                 return "";
             }
 
@@ -843,6 +843,10 @@ public class MediaManager {
             }
         }
         String trackId = getTrackIdForUrl(url);
+        var playbackManager = plugin.getPlaybackManager();
+        if (playbackManager != null) {
+            playbackManager.stopAllForTrackId(trackId);
+        }
         return CompletableFuture.runAsync(() -> {
             cleanupRuntimeAssets(trackId);
         }, com.hypixel.hytale.server.core.HytaleServer.SCHEDULED_EXECUTOR);
@@ -909,7 +913,12 @@ public class MediaManager {
     private void logExternalToolStatus() {
         logEnvironmentDiagnostics();
         ensureYtDlpAvailable();
-        logToolStatus(getYtDlpCommand(), "--version");
+        String ytDlpCommand = resolveYtDlpCommand();
+        if (ytDlpCommand != null) {
+            logToolStatus(ytDlpCommand, "--version");
+        } else {
+            plugin.getLogger().at(Level.WARNING).log("yt-dlp not found. Use /setup_radio for setup details.");
+        }
         logToolStatus("ffmpeg", "-version");
         if (isYtDlpAvailable() && isFfmpegAvailable()) {
             plugin.getLogger().at(Level.INFO).log("MediaRadio tools ready: yt-dlp + ffmpeg detected.");
@@ -944,15 +953,7 @@ public class MediaManager {
     }
 
     private void ensureYtDlpAvailable() {
-        if (isToolAvailable("yt-dlp", "--version")) {
-            ytDlpCommand = "yt-dlp";
-            return;
-        }
-        Path existing = getExpectedYtDlpPath();
-        if (Files.exists(existing)) {
-            ytDlpCommand = existing.toString();
-            return;
-        }
+        ytDlpCommand = resolveYtDlpCommand();
     }
 
     private boolean isToolAvailable(String tool, String versionArg) {
@@ -967,12 +968,29 @@ public class MediaManager {
         }
     }
 
-    private String getYtDlpCommand() {
-        return ytDlpCommand != null && !ytDlpCommand.isEmpty() ? ytDlpCommand : "yt-dlp";
+    private String requireYtDlpCommand() {
+        String resolved = resolveYtDlpCommand();
+        if (resolved == null || resolved.isEmpty()) {
+            throw new RuntimeException(
+                    "yt-dlp not available. Run /setup_radio and place it at " + getExpectedYtDlpPath());
+        }
+        ytDlpCommand = resolved;
+        return resolved;
+    }
+
+    private String resolveYtDlpCommand() {
+        if (isToolAvailable("yt-dlp", "--version")) {
+            return "yt-dlp";
+        }
+        Path expected = getExpectedYtDlpPath();
+        if (Files.exists(expected)) {
+            return expected.toString();
+        }
+        return null;
     }
 
     public boolean isYtDlpAvailable() {
-        return isToolAvailable("yt-dlp", "--version") || Files.exists(getExpectedYtDlpPath());
+        return resolveYtDlpCommand() != null;
     }
 
     public Path getExpectedYtDlpPath() {

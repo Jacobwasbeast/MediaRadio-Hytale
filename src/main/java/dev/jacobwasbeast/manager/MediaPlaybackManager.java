@@ -247,6 +247,32 @@ public class MediaPlaybackManager {
         }
     }
 
+    public int stopAllForTrackId(String trackId) {
+        if (trackId == null || trackId.isEmpty()) {
+            return 0;
+        }
+        java.util.ArrayList<PlaybackSession> toStop = new java.util.ArrayList<>();
+        for (PlaybackSession session : activePlayerSessions.values()) {
+            if (trackId.equals(session.getTrackId()) && !session.isStopped()) {
+                toStop.add(session);
+            }
+        }
+        for (PlaybackSession session : activeBlockSessions.values()) {
+            if (trackId.equals(session.getTrackId()) && !session.isStopped()) {
+                toStop.add(session);
+            }
+        }
+        for (PlaybackSession session : toStop) {
+            session.stop();
+            removeSession(session);
+        }
+        if (!toStop.isEmpty()) {
+            plugin.getLogger().at(Level.INFO).log(
+                    "Stopped %d playback session(s) for track %s", toStop.size(), trackId);
+        }
+        return toStop.size();
+    }
+
     public boolean isLoopEnabled(UUID playerId) {
         return loopPreferences.getOrDefault(playerId, false);
     }

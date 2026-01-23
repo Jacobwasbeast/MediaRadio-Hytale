@@ -371,9 +371,12 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                                                     mediaInfo.duration,
                                                     mediaInfo.trackId,
                                                     mediaInfo.thumbnailAssetPath);
-                                            player.getPageManager().openCustomPage(ref, store,
-                                                    new RadioConfigPage(playerRef, blockPos));
                                         }
+                                        String reason = extractFailureReason(ex);
+                                        sendChatAndClose(ref, store,
+                                                reason.isEmpty()
+                                                        ? "Playback failed while preparing."
+                                                        : "Playback failed: " + reason);
                                     });
                                     return null;
                                 });
@@ -422,9 +425,12 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                                                     mediaInfo.duration,
                                                     mediaInfo.trackId,
                                                     mediaInfo.thumbnailAssetPath);
-                                            player.getPageManager().openCustomPage(ref, store,
-                                                    new RadioConfigPage(playerRef, blockPos));
                                         }
+                                        String reason = extractFailureReason(ex);
+                                        sendChatAndClose(ref, store,
+                                                reason.isEmpty()
+                                                        ? "Playback failed while preparing."
+                                                        : "Playback failed: " + reason);
                                     });
                                     return null;
                                 });
@@ -456,22 +462,17 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                 });
             }).exceptionally(e -> {
                 store.getExternalData().getWorld().execute(() -> {
-                    Player updatedPlayer = store.getComponent(ref, Player.getComponentType());
-                    if (updatedPlayer != null) {
-                        String reason = extractFailureReason(e);
-                        if (reason.isEmpty()) {
-                            updatedPlayer.sendMessage(Message.translation("Failed to load media. Removed from library."));
-                        } else {
-                            updatedPlayer.sendMessage(Message.translation("Failed to load media: " + reason));
-                        }
-                    }
+                    String reason = extractFailureReason(e);
+                    sendChatAndClose(ref, store,
+                            reason.isEmpty()
+                                    ? "Failed to load media. Removed from library."
+                                    : "Failed to load media: " + reason);
                     if (library != null) {
                         String playerId = playerRef.getUuid().toString();
                         library.removeSong(playerId, finalUrl);
                         if (!library.isUrlReferencedByOtherPlayers(playerId, finalUrl)) {
                             MediaRadioPlugin.getInstance().getMediaManager().deleteMediaForUrl(finalUrl);
                         }
-                        player.getPageManager().openCustomPage(ref, store, new RadioConfigPage(playerRef, blockPos));
                     }
                 });
                 return null;
@@ -714,6 +715,16 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                 EventData.of("Action", "VolumeUp"), false);
         eventBuilder.addEventBinding(CustomUIEventBindingType.Activating, "#VolumeDown",
                 EventData.of("Action", "VolumeDown"), false);
+    }
+
+    private void sendChatAndClose(Ref<EntityStore> ref, Store<EntityStore> store, String message) {
+        if (message != null && !message.isEmpty()) {
+            playerRef.sendMessage(Message.raw(message));
+        }
+        Player player = store.getComponent(ref, Player.getComponentType());
+        if (player != null) {
+            player.getPageManager().setPage(ref, store, Page.None);
+        }
     }
 
     private float parseVolumePercent(String text) {
