@@ -911,6 +911,9 @@ public class MediaManager {
         ensureYtDlpAvailable();
         logToolStatus(getYtDlpCommand(), "--version");
         logToolStatus("ffmpeg", "-version");
+        if (isYtDlpAvailable() && isFfmpegAvailable()) {
+            plugin.getLogger().at(Level.INFO).log("MediaRadio tools ready: yt-dlp + ffmpeg detected.");
+        }
     }
 
     private void logToolStatus(String tool, String versionArg) {
@@ -945,30 +948,10 @@ public class MediaManager {
             ytDlpCommand = "yt-dlp";
             return;
         }
-        Path existing = runtimeAssetsPath.resolve("bin").resolve(resolveYtDlpAssetName());
+        Path existing = getExpectedYtDlpPath();
         if (Files.exists(existing)) {
             ytDlpCommand = existing.toString();
             return;
-        }
-        try {
-            Path binDir = runtimeAssetsPath.resolve("bin");
-            Files.createDirectories(binDir);
-            String assetName = resolveYtDlpAssetName();
-            if (assetName == null) {
-                plugin.getLogger().at(Level.WARNING).log("Unsupported OS for yt-dlp auto-download.");
-                return;
-            }
-            Path target = binDir.resolve(assetName);
-            String url = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/" + assetName;
-            plugin.getLogger().at(Level.INFO).log("yt-dlp not found. Attempting download from %s", url);
-            downloadToFile(url, target);
-            if (!isWindows()) {
-                target.toFile().setExecutable(true, false);
-            }
-            ytDlpCommand = target.toString();
-            plugin.getLogger().at(Level.INFO).log("yt-dlp downloaded to %s", target);
-        } catch (Exception e) {
-            plugin.getLogger().at(Level.WARNING).withCause(e).log("Failed to auto-download yt-dlp.");
         }
     }
 
@@ -988,6 +971,22 @@ public class MediaManager {
         return ytDlpCommand != null && !ytDlpCommand.isEmpty() ? ytDlpCommand : "yt-dlp";
     }
 
+    public boolean isYtDlpAvailable() {
+        return isToolAvailable("yt-dlp", "--version") || Files.exists(getExpectedYtDlpPath());
+    }
+
+    public Path getExpectedYtDlpPath() {
+        return runtimeAssetsPath.resolve("bin").resolve(resolveYtDlpAssetName());
+    }
+
+    public boolean isFfmpegAvailable() {
+        return isToolAvailable("ffmpeg", "-version") || Files.exists(getExpectedFfmpegPath());
+    }
+
+    public Path getExpectedFfmpegPath() {
+        return runtimeAssetsPath.resolve("bin").resolve(resolveFfmpegAssetName());
+    }
+
     private String resolveYtDlpAssetName() {
         if (isWindows()) {
             return "yt-dlp.exe";
@@ -998,6 +997,13 @@ public class MediaManager {
         return "yt-dlp";
     }
 
+    private String resolveFfmpegAssetName() {
+        if (isWindows()) {
+            return "ffmpeg.exe";
+        }
+        return "ffmpeg";
+    }
+
     private boolean isWindows() {
         String os = System.getProperty("os.name", "").toLowerCase();
         return os.contains("win");
@@ -1006,12 +1012,6 @@ public class MediaManager {
     private boolean isMac() {
         String os = System.getProperty("os.name", "").toLowerCase();
         return os.contains("mac");
-    }
-
-    private void downloadToFile(String url, Path target) throws IOException {
-        try (java.io.InputStream in = new java.net.URL(url).openStream()) {
-            Files.copy(in, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-        }
     }
 
     private void logEnvironmentDiagnostics() {

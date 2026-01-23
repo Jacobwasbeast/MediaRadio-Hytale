@@ -16,3 +16,4 @@ customUI.artistName = Artist Name
 customUI.notPlaying = Not Playing
 radio.name = Media Radio
 radio.description = Plays web audio while held.
+mediaRadio.commands.setup.desc = Show MediaRadio setup instructions.

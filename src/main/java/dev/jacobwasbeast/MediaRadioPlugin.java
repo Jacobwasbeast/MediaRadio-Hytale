@@ -3,6 +3,7 @@ package dev.jacobwasbeast;
 import com.hypixel.hytale.server.core.plugin.JavaPlugin;
 import com.hypixel.hytale.server.core.plugin.JavaPluginInit;
 import com.hypixel.hytale.server.core.modules.interaction.interaction.config.server.OpenCustomUIInteraction;
+import com.hypixel.hytale.server.core.Message;
 import dev.jacobwasbeast.manager.MediaManager;
 import dev.jacobwasbeast.ui.RadioConfigSupplier;
 import java.nio.file.Files;
@@ -107,6 +108,34 @@ public class MediaRadioPlugin extends JavaPlugin {
 
         this.getLogger().at(Level.INFO).log("MediaRadioPlugin started! MediaManager initialized: %s",
                 this.mediaManager != null);
+
+        this.getCommandRegistry().registerCommand(new dev.jacobwasbeast.command.SetupRadioCommand(this));
+
+        this.getEventRegistry().registerGlobal(
+                com.hypixel.hytale.server.core.event.events.player.PlayerConnectEvent.class,
+                event -> {
+                    if (mediaManager == null) {
+                        return;
+                    }
+                    boolean ytDlpAvailable = mediaManager.isYtDlpAvailable();
+                    boolean ffmpegAvailable = mediaManager.isFfmpegAvailable();
+                    if (ytDlpAvailable && ffmpegAvailable) {
+                        return;
+                    }
+                    var playerRef = event.getPlayerRef();
+                    if (playerRef != null) {
+                        if (!ytDlpAvailable && !ffmpegAvailable) {
+                            playerRef.sendMessage(Message.raw(
+                                    "MediaRadio requires yt-dlp and ffmpeg. Run /setup_radio for setup details."));
+                        } else if (!ytDlpAvailable) {
+                            playerRef.sendMessage(Message.raw(
+                                    "MediaRadio requires yt-dlp. Run /setup_radio for setup details."));
+                        } else {
+                            playerRef.sendMessage(Message.raw(
+                                    "MediaRadio requires ffmpeg. Run /setup_radio for setup details."));
+                        }
+                    }
+                });
     }
 
     @Override
