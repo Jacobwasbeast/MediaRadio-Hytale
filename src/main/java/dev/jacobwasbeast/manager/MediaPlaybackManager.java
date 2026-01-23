@@ -3,9 +3,11 @@ package dev.jacobwasbeast.manager;
 import com.hypixel.hytale.component.ComponentAccessor;
 import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.math.vector.Vector3i;
+import com.hypixel.hytale.math.vector.Vector3d;
 import com.hypixel.hytale.protocol.SoundCategory;
 import com.hypixel.hytale.server.core.asset.type.soundevent.config.SoundEvent;
 import com.hypixel.hytale.server.core.entity.entities.Player;
+import com.hypixel.hytale.server.core.modules.entity.component.TransformComponent;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.world.SoundUtil;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
@@ -31,6 +33,8 @@ public class MediaPlaybackManager {
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
     private static final int MAX_MISSING_ASSET_RETRIES = 10;
     private static final long MISSING_ASSET_RETRY_DELAY_MS = 500;
+    private static final long BASE_CHUNK_OVERLAP_MS = 15;
+    private static final long MAX_CHUNK_OVERLAP_MS = 120;
 
     public MediaPlaybackManager(MediaRadioPlugin plugin) {
         this.plugin = plugin;
@@ -62,9 +66,10 @@ public class MediaPlaybackManager {
         String key = getBlockKey(blockPos);
 
         // Stop any existing session at this block
-        PlaybackSession existing = activeBlockSessions.get(key);
+        PlaybackSession existing = activeBlockSessions.remove(key);
         if (existing != null) {
             existing.stop();
+            handleSessionEnded(existing);
         }
 
         // Create new session
@@ -80,6 +85,45 @@ public class MediaPlaybackManager {
     }
 
     /**
+     * Start playing a track at a block position with metadata
+     */
+    public void playAtBlock(MediaInfo mediaInfo, Vector3i blockPos, int chunkDurationMs, Store<EntityStore> store) {
+        if (mediaInfo == null || blockPos == null) {
+            return;
+        }
+        int totalChunks = mediaInfo.chunkCount;
+        if (totalChunks <= 0) {
+            plugin.getLogger().at(Level.WARNING).log("Track info not found in library: %s", mediaInfo.trackId);
+            return;
+        }
+
+        String key = getBlockKey(blockPos);
+        PlaybackSession existing = activeBlockSessions.remove(key);
+        if (existing != null) {
+            existing.stop();
+            handleSessionEnded(existing);
+        }
+
+        PlaybackSession session = new PlaybackSession(
+                mediaInfo.trackId,
+                blockPos,
+                totalChunks,
+                chunkDurationMs,
+                mediaInfo.title,
+                mediaInfo.artist,
+                mediaInfo.thumbnailAssetPath,
+                mediaInfo.url,
+                mediaInfo.duration * 1000L);
+        activeBlockSessions.put(key, session);
+
+        session.play();
+        playCurrentChunk(session, store);
+
+        plugin.getLogger().at(Level.INFO).log("Started block playback: track=%s, chunks=%d, duration=%dms each",
+                mediaInfo.trackId, totalChunks, chunkDurationMs);
+    }
+
+    /**
      * Start playing a track for a player (handheld radio)
      */
     public void playForPlayer(MediaInfo mediaInfo, PlayerRef playerRef, int totalChunks, int chunkDurationMs,
@@ -92,9 +136,10 @@ public class MediaPlaybackManager {
             return;
         }
 
-        PlaybackSession existing = activePlayerSessions.get(playerId);
+        PlaybackSession existing = activePlayerSessions.remove(playerId);
         if (existing != null) {
             existing.stop();
+            handleSessionEnded(existing);
         }
 
         PlaybackSession session = new PlaybackSession(
@@ -181,6 +226,7 @@ public class MediaPlaybackManager {
         PlaybackSession session = activeBlockSessions.remove(key);
         if (session != null) {
             session.stop();
+            handleSessionEnded(session);
             plugin.getLogger().at(Level.INFO).log("Stopped playback");
         }
     }
@@ -196,6 +242,7 @@ public class MediaPlaybackManager {
         PlaybackSession session = activePlayerSessions.remove(playerId);
         if (session != null) {
             session.stop();
+            handleSessionEnded(session);
             plugin.getLogger().at(Level.INFO).log("Stopped playback for player %s", playerId);
         }
     }
@@ -210,6 +257,16 @@ public class MediaPlaybackManager {
         }
         loopPreferences.put(playerId, enabled);
         PlaybackSession session = activePlayerSessions.get(playerId);
+        if (session != null) {
+            session.setLoopEnabled(enabled);
+        }
+    }
+
+    public void setLoopEnabled(Vector3i blockPos, boolean enabled) {
+        if (blockPos == null) {
+            return;
+        }
+        PlaybackSession session = getSession(blockPos);
         if (session != null) {
             session.setLoopEnabled(enabled);
         }
@@ -334,9 +391,26 @@ public class MediaPlaybackManager {
                 return;
             }
 
+            var playerEntityRef = playerRef.getReference();
+            if (playerEntityRef == null || !playerEntityRef.isValid()) {
+                return;
+            }
+            if (!(store instanceof ComponentAccessor)) {
+                return;
+            }
+            TransformComponent transform = store.getComponent(playerEntityRef, TransformComponent.getComponentType());
+            if (transform == null) {
+                return;
+            }
+            Vector3d position = transform.getPosition();
             float volume = getVolume(playerRef.getUuid());
-            SoundUtil.playSoundEvent2dToPlayer(playerRef, soundEventIndex, SoundCategory.Music, volume, 1.0f);
-            plugin.getLogger().at(Level.INFO).log("Playing chunk %d/%d for %s: %s",
+            SoundUtil.playSoundEvent3d(
+                    soundEventIndex,
+                    SoundCategory.SFX,
+                    position.x, position.y, position.z,
+                    volume, 1.0f,
+                    (ComponentAccessor<EntityStore>) store);
+            plugin.getLogger().at(Level.INFO).log("Playing chunk %d/%d attached to %s: %s",
                     session.getCurrentChunk() + 1, session.getTotalChunks(), playerRef.getUsername(), chunkTrackId);
         } else {
             Vector3i pos = session.getBlockPosition();
@@ -365,15 +439,29 @@ public class MediaPlaybackManager {
      * Schedule the next chunk to play after current one finishes
      */
     private void scheduleNextChunk(PlaybackSession session, Store<EntityStore> store) {
-        long delayMs = session.getChunkDurationMs();
+        long lagMs = session.getLastScheduleLagMs();
+        long overlapMs = BASE_CHUNK_OVERLAP_MS + lagMs;
+        overlapMs = Math.min(MAX_CHUNK_OVERLAP_MS, overlapMs);
+        long maxOverlap = Math.max(0, session.getChunkDurationMs() - 5);
+        overlapMs = Math.min(overlapMs, maxOverlap);
+        long delayMs = Math.max(0, session.getChunkDurationMs() - overlapMs);
 
         ScheduledFuture<?> future = scheduler.schedule(() -> {
-            if (session.isPlaying() && session.advanceChunk()) {
+            if (!session.isPlaying()) {
+                return;
+            }
+            long expectedEnd = session.getCurrentChunkStartMs() + session.getChunkDurationMs();
+            long lag = Math.max(0, System.currentTimeMillis() - expectedEnd);
+            session.setLastScheduleLagMs(lag);
+            if (session.advanceChunk()) {
                 // Use world thread to play sound
                 store.getExternalData().getWorld().execute(() -> {
                     playCurrentChunk(session, store);
                 });
+                return;
             }
+            removeSession(session);
+            handleSessionEnded(session);
         }, delayMs, TimeUnit.MILLISECONDS);
 
         session.setScheduledNextChunk(future);
@@ -384,6 +472,8 @@ public class MediaPlaybackManager {
         if (attempts > MAX_MISSING_ASSET_RETRIES) {
             plugin.getLogger().at(Level.WARNING).log("SoundEvent still missing after %d attempts, stopping playback.", attempts);
             session.stop();
+            removeSession(session);
+            handleSessionEnded(session);
             return;
         }
 
@@ -428,6 +518,54 @@ public class MediaPlaybackManager {
             return false;
         }
         return RadioItemUtil.isRadioHeld(player);
+    }
+
+    private void removeSession(PlaybackSession session) {
+        if (session == null) {
+            return;
+        }
+        if (session.isPlayerBound()) {
+            PlayerRef playerRef = session.getPlayerRef();
+            if (playerRef != null) {
+                activePlayerSessions.remove(playerRef.getUuid(), session);
+            }
+            return;
+        }
+        Vector3i pos = session.getBlockPosition();
+        if (pos != null) {
+            activeBlockSessions.remove(getBlockKey(pos), session);
+        }
+    }
+
+    private void handleSessionEnded(PlaybackSession session) {
+        if (session == null) {
+            return;
+        }
+        String trackId = session.getTrackId();
+        if (trackId == null || trackId.isEmpty()) {
+            return;
+        }
+        if (isTrackActive(trackId)) {
+            return;
+        }
+        MediaManager manager = plugin.getMediaManager();
+        if (manager != null) {
+            manager.cleanupRuntimeAssets(trackId);
+        }
+    }
+
+    private boolean isTrackActive(String trackId) {
+        for (PlaybackSession session : activePlayerSessions.values()) {
+            if (trackId.equals(session.getTrackId()) && !session.isStopped()) {
+                return true;
+            }
+        }
+        for (PlaybackSession session : activeBlockSessions.values()) {
+            if (trackId.equals(session.getTrackId()) && !session.isStopped()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

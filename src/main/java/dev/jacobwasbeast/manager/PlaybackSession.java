@@ -28,6 +28,7 @@ public class PlaybackSession {
     private long currentChunkStartMs = 0;
     private long pausedAtMs = 0;
     private long pausedOffsetMs = 0;
+    private long lastScheduleLagMs = 0;
     private boolean isPaused = false;
     private boolean pausedByUser = false;
     private boolean isStopped = true;
@@ -35,16 +36,21 @@ public class PlaybackSession {
     private ScheduledFuture<?> scheduledNextChunk;
 
     public PlaybackSession(String trackId, Vector3i blockPosition, int totalChunks, int chunkDurationMs) {
+        this(trackId, blockPosition, totalChunks, chunkDurationMs, "", "", "", "", 0);
+    }
+
+    public PlaybackSession(String trackId, Vector3i blockPosition, int totalChunks, int chunkDurationMs, String title,
+            String artist, String thumbnailUrl, String url, long durationMs) {
         this.trackId = trackId;
         this.blockPosition = blockPosition;
         this.playerRef = null;
-        this.title = "";
-        this.artist = "";
-        this.thumbnailUrl = "";
-        this.url = "";
+        this.title = title != null ? title : "";
+        this.artist = artist != null ? artist : "";
+        this.thumbnailUrl = thumbnailUrl != null ? thumbnailUrl : "";
+        this.url = url != null ? url : "";
         this.totalChunks = totalChunks;
         this.chunkDurationMs = chunkDurationMs;
-        this.totalDurationMs = (long) totalChunks * chunkDurationMs;
+        this.totalDurationMs = durationMs > 0 ? durationMs : (long) totalChunks * chunkDurationMs;
     }
 
     public PlaybackSession(String trackId, PlayerRef playerRef, int totalChunks, int chunkDurationMs, String title,
@@ -149,6 +155,7 @@ public class PlaybackSession {
             missingAssetRetries = 0;
             currentChunkStartMs = System.currentTimeMillis();
             pausedOffsetMs = 0;
+            lastScheduleLagMs = 0;
         } else if (isPaused) {
             // Resume within current chunk
             currentChunkStartMs = System.currentTimeMillis() - pausedOffsetMs;
@@ -195,6 +202,7 @@ public class PlaybackSession {
         pausedOffsetMs = 0;
         pausedByUser = false;
         missingAssetRetries = 0;
+        lastScheduleLagMs = 0;
         cancelScheduledChunk();
     }
 
@@ -283,6 +291,18 @@ public class PlaybackSession {
     public void markChunkStart() {
         currentChunkStartMs = System.currentTimeMillis();
         pausedOffsetMs = 0;
+    }
+
+    public long getCurrentChunkStartMs() {
+        return currentChunkStartMs;
+    }
+
+    public long getLastScheduleLagMs() {
+        return lastScheduleLagMs;
+    }
+
+    public void setLastScheduleLagMs(long lastScheduleLagMs) {
+        this.lastScheduleLagMs = Math.max(0, lastScheduleLagMs);
     }
 
     public ScheduledFuture<?> getScheduledNextChunk() {

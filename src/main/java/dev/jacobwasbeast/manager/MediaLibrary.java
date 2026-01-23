@@ -68,7 +68,7 @@ public class MediaLibrary {
 
     private File resolveLibraryFile() {
         Path baseDir = MediaRadioPlugin.resolveRuntimeBasePath();
-        Path target = baseDir.resolve("saved_songs.json").toAbsolutePath();
+        Path target = baseDir.resolve("songs.json").toAbsolutePath();
         Path legacy = new File("saved_songs.json").toPath().toAbsolutePath();
         if (!target.equals(legacy) && Files.exists(legacy) && !Files.exists(target)) {
             try {

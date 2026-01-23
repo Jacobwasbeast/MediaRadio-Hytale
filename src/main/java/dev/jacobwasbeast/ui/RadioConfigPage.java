@@ -14,10 +14,12 @@ import com.hypixel.hytale.server.core.entity.entities.player.pages.InteractiveCu
 import com.hypixel.hytale.server.core.ui.builder.EventData;
 import com.hypixel.hytale.server.core.ui.builder.UICommandBuilder;
 import com.hypixel.hytale.server.core.ui.builder.UIEventBuilder;
+import com.hypixel.hytale.math.vector.Vector3i;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import dev.jacobwasbeast.MediaRadioPlugin;
 import com.hypixel.hytale.server.core.Message;
+import dev.jacobwasbeast.manager.PlaybackSession;
 
 import javax.annotation.Nonnull;
 import java.util.Map;
@@ -35,10 +37,16 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
     private static final int VOLUME_STEP_PERCENT = 10;
 
     private final PlayerRef playerRef;
+    private final Vector3i blockPos;
 
     public RadioConfigPage(PlayerRef playerRef) {
+        this(playerRef, null);
+    }
+
+    public RadioConfigPage(PlayerRef playerRef, Vector3i blockPos) {
         super(playerRef, CustomPageLifetime.CanDismiss, RadioConfigPage.RadioPageData.CODEC);
         this.playerRef = playerRef;
+        this.blockPos = blockPos;
     }
 
     @Override
@@ -47,7 +55,7 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
         commandBuilder.append("Pages/MediaRadio/RadioConfig.ui");
 
         // Populate Now Playing
-        var session = MediaRadioPlugin.getInstance().getPlaybackManager().getSession(playerRef.getUuid());
+        PlaybackSession session = resolveSession();
         if (session != null && !session.isStopped()) {
             commandBuilder.set("#NowPlayingTitle.Text", session.getTitle().isEmpty() ? "Unknown Title" : session.getTitle());
             commandBuilder.set("#NowPlayingArtist.Text", session.getArtist());
@@ -80,8 +88,7 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
             commandBuilder.set("#NowPlayingTime.Text", "0:00 / 0:00");
             commandBuilder.set("#SeekSlider.Value", 0);
             commandBuilder.set("#SeekSlider.Visible", false);
-            var manager = MediaRadioPlugin.getInstance().getPlaybackManager();
-            commandBuilder.set("#LoopButton.Text", formatLoopLabel(manager.isLoopEnabled(playerRef.getUuid())));
+            commandBuilder.set("#LoopButton.Text", resolveLoopLabel(null));
             commandBuilder.set("#NowPlayingThumb.Visible", false);
         }
 
@@ -89,6 +96,11 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
         float volume = playbackManager.getVolume(playerRef.getUuid());
         int volumePercent = Math.round(volume * 100.0f);
         commandBuilder.set("#VolumeInput.Value", String.valueOf(volumePercent));
+        boolean volumeVisible = blockPos == null;
+        commandBuilder.set("#VolumeLabel.Visible", volumeVisible);
+        commandBuilder.set("#VolumeInput.Visible", volumeVisible);
+        commandBuilder.set("#VolumeUp.Visible", volumeVisible);
+        commandBuilder.set("#VolumeDown.Visible", volumeVisible);
 
         if (session != null && !session.getUrl().isEmpty()) {
             commandBuilder.set("#UrlInput.Value", session.getUrl());
@@ -163,9 +175,16 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
             data.action = null;
             store.getExternalData().getWorld().execute(() -> {
                 var manager = MediaRadioPlugin.getInstance().getPlaybackManager();
-                boolean enabled = !manager.isLoopEnabled(playerRef.getUuid());
-                manager.setLoopEnabled(playerRef.getUuid(), enabled);
-                player.getPageManager().openCustomPage(ref, store, new RadioConfigPage(playerRef));
+                if (blockPos != null) {
+                    PlaybackSession session = manager.getSession(blockPos);
+                    if (session != null) {
+                        manager.setLoopEnabled(blockPos, !session.isLoopEnabled());
+                    }
+                } else {
+                    boolean enabled = !manager.isLoopEnabled(playerRef.getUuid());
+                    manager.setLoopEnabled(playerRef.getUuid(), enabled);
+                }
+                player.getPageManager().openCustomPage(ref, store, new RadioConfigPage(playerRef, blockPos));
             });
             return;
         } else if ("Remove".equals(data.action)) {
@@ -187,36 +206,52 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                     }
                 }
                 var manager = MediaRadioPlugin.getInstance().getPlaybackManager();
-                var session = manager.getSession(playerRef.getUuid());
+                var session = blockPos != null ? manager.getSession(blockPos) : manager.getSession(playerRef.getUuid());
                 if (session != null && finalRemoveUrl != null && finalRemoveUrl.equals(session.getUrl())) {
-                    manager.stop(playerRef);
+                    if (blockPos != null) {
+                        manager.stop(blockPos);
+                    } else {
+                        manager.stop(playerRef);
+                    }
                 }
-                player.getPageManager().openCustomPage(ref, store, new RadioConfigPage(playerRef));
+                player.getPageManager().openCustomPage(ref, store, new RadioConfigPage(playerRef, blockPos));
             });
             return;
         } else if ("Pause".equals(data.action)) {
             data.action = null; // Consume
             store.getExternalData().getWorld().execute(() -> {
                 var manager = MediaRadioPlugin.getInstance().getPlaybackManager();
-                var session = manager.getSession(playerRef.getUuid());
+                var session = blockPos != null ? manager.getSession(blockPos) : manager.getSession(playerRef.getUuid());
                 if (session != null) {
                     if (session.isPaused()) {
-                        manager.resume(playerRef, store);
+                        if (blockPos != null) {
+                            manager.resume(blockPos, store);
+                        } else {
+                            manager.resume(playerRef, store);
+                        }
                         player.sendMessage(Message.translation("Resumed playback."));
                     } else {
-                        manager.pauseByUser(playerRef);
+                        if (blockPos != null) {
+                            manager.pause(blockPos);
+                        } else {
+                            manager.pauseByUser(playerRef);
+                        }
                         player.sendMessage(Message.translation("Paused playback."));
                     }
-                    player.getPageManager().openCustomPage(ref, store, new RadioConfigPage(playerRef));
+                    player.getPageManager().openCustomPage(ref, store, new RadioConfigPage(playerRef, blockPos));
                 }
             });
             return;
         } else if ("Stop".equals(data.action)) {
             data.action = null; // Consume
             store.getExternalData().getWorld().execute(() -> {
-                MediaRadioPlugin.getInstance().getPlaybackManager().stop(playerRef);
+                if (blockPos != null) {
+                    MediaRadioPlugin.getInstance().getPlaybackManager().stop(blockPos);
+                } else {
+                    MediaRadioPlugin.getInstance().getPlaybackManager().stop(playerRef);
+                }
                 player.sendMessage(Message.translation("Stopped playback."));
-                player.getPageManager().openCustomPage(ref, store, new RadioConfigPage(playerRef));
+                player.getPageManager().openCustomPage(ref, store, new RadioConfigPage(playerRef, blockPos));
             });
             return;
         }
@@ -229,6 +264,10 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
         }
 
         if ("VolumeUp".equals(data.action) || "VolumeDown".equals(data.action)) {
+            if (blockPos != null) {
+                data.action = null;
+                return;
+            }
             boolean up = "VolumeUp".equals(data.action);
             data.action = null;
             store.getExternalData().getWorld().execute(() -> {
@@ -246,6 +285,10 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
         }
 
         if (data.volumeText != null) {
+            if (blockPos != null) {
+                data.volumeText = null;
+                return;
+            }
             String volumeText = data.volumeText;
             data.volumeText = null;
             float percent = parseVolumePercent(volumeText);
@@ -276,14 +319,19 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
             if (library != null) {
                 library.upsertSongStatus(playerRef.getUuid().toString(), finalUrl, "Downloading...", null, null, null, 0, null,
                         null);
-                player.getPageManager().openCustomPage(ref, store, new RadioConfigPage(playerRef));
+                player.getPageManager().openCustomPage(ref, store, new RadioConfigPage(playerRef, blockPos));
             }
             player.sendMessage(Message.translation("Requesting media..."));
 
             MediaRadioPlugin.getInstance().getMediaManager().requestMedia(finalUrl).thenAccept(mediaInfo -> {
                 store.getExternalData().getWorld().execute(() -> {
                     // Start playback
-                    MediaRadioPlugin.getInstance().getMediaManager().playSound(mediaInfo, playerRef, store);
+                    if (blockPos != null) {
+                        MediaRadioPlugin.getInstance().getMediaManager()
+                                .playSoundAtBlock(mediaInfo, blockPos, 750, store);
+                    } else {
+                        MediaRadioPlugin.getInstance().getMediaManager().playSound(mediaInfo, playerRef, store);
+                    }
 
                     // Save to library
                     if (library != null) {
@@ -306,7 +354,7 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                                 .translation("Playing: " + (mediaInfo.title != null ? mediaInfo.title : "Unknown")));
 
                         // Refresh UI to show new song details
-                        p.getPageManager().openCustomPage(ref, store, new RadioConfigPage(playerRef));
+                        p.getPageManager().openCustomPage(ref, store, new RadioConfigPage(playerRef, blockPos));
                     }
                 });
             }).exceptionally(e -> {
@@ -326,7 +374,7 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                         if (!library.isUrlReferencedByOtherPlayers(playerId, finalUrl)) {
                             MediaRadioPlugin.getInstance().getMediaManager().deleteMediaForUrl(finalUrl);
                         }
-                        player.getPageManager().openCustomPage(ref, store, new RadioConfigPage(playerRef));
+                        player.getPageManager().openCustomPage(ref, store, new RadioConfigPage(playerRef, blockPos));
                     }
                 });
                 return null;
@@ -399,7 +447,7 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
         if (scrubState != null && scrubState.isScrubbing) {
             return true;
         }
-        var session = MediaRadioPlugin.getInstance().getPlaybackManager().getSession(playerRef.getUuid());
+        PlaybackSession session = resolveSession();
         UICommandBuilder commandBuilder = new UICommandBuilder();
         UUID playerId = playerRef.getUuid();
         if (session != null && !session.isStopped()) {
@@ -435,14 +483,18 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
             commandBuilder.set("#NowPlayingTime.Text", "0:00 / 0:00");
             commandBuilder.set("#SeekSlider.Value", 0);
             commandBuilder.set("#SeekSlider.Visible", false);
-            var manager = MediaRadioPlugin.getInstance().getPlaybackManager();
-            commandBuilder.set("#LoopButton.Text", formatLoopLabel(manager.isLoopEnabled(playerRef.getUuid())));
+            commandBuilder.set("#LoopButton.Text", resolveLoopLabel(null));
             commandBuilder.set("#NowPlayingThumb.Visible", false);
         }
         var playbackManager = MediaRadioPlugin.getInstance().getPlaybackManager();
         float volume = playbackManager.getVolume(playerRef.getUuid());
         int volumePercent = Math.round(volume * 100.0f);
         commandBuilder.set("#VolumeInput.Value", String.valueOf(volumePercent));
+        boolean volumeVisible = blockPos == null;
+        commandBuilder.set("#VolumeLabel.Visible", volumeVisible);
+        commandBuilder.set("#VolumeInput.Visible", volumeVisible);
+        commandBuilder.set("#VolumeUp.Visible", volumeVisible);
+        commandBuilder.set("#VolumeDown.Visible", volumeVisible);
         UIEventBuilder eventBuilder = new UIEventBuilder();
         addEventBindings(eventBuilder);
         sendUpdate(commandBuilder, eventBuilder, false);
@@ -451,7 +503,7 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
 
     private void handleSeekScrub(float seekPercent, Store<EntityStore> store) {
         var manager = MediaRadioPlugin.getInstance().getPlaybackManager();
-        var session = manager.getSession(playerRef.getUuid());
+        PlaybackSession session = blockPos != null ? manager.getSession(blockPos) : manager.getSession(playerRef.getUuid());
         if (session == null || session.isStopped()) {
             return;
         }
@@ -462,7 +514,11 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
             state.wasPlaying = session.isPlaying();
             state.isScrubbing = true;
             if (state.wasPlaying) {
-                manager.pauseByUser(playerRef);
+                if (blockPos != null) {
+                    manager.pause(blockPos);
+                } else {
+                    manager.pauseByUser(playerRef);
+                }
             }
         }
         state.lastPercent = seekPercent;
@@ -480,11 +536,19 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
         }
         state.finalizeTask = HytaleServer.SCHEDULED_EXECUTOR.schedule(() -> {
             store.getExternalData().getWorld().execute(() -> {
-                var freshSession = manager.getSession(playerId);
+                PlaybackSession freshSession = blockPos != null ? manager.getSession(blockPos) : manager.getSession(playerId);
                 if (freshSession != null && !freshSession.isStopped()) {
-                    manager.seek(playerRef, state.lastPercent / 100.0, store);
+                    if (blockPos != null) {
+                        manager.seek(blockPos, state.lastPercent / 100.0, store);
+                    } else {
+                        manager.seek(playerRef, state.lastPercent / 100.0, store);
+                    }
                     if (state.wasPlaying) {
-                        manager.resume(playerRef, store);
+                        if (blockPos != null) {
+                            manager.resume(blockPos, store);
+                        } else {
+                            manager.resume(playerRef, store);
+                        }
                     }
                 }
                 state.isScrubbing = false;
@@ -499,6 +563,22 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
         private boolean wasPlaying;
         private double lastPercent;
         private ScheduledFuture<?> finalizeTask;
+    }
+
+    private PlaybackSession resolveSession() {
+        var manager = MediaRadioPlugin.getInstance().getPlaybackManager();
+        return blockPos != null ? manager.getSession(blockPos) : manager.getSession(playerRef.getUuid());
+    }
+
+    private Message resolveLoopLabel(PlaybackSession session) {
+        if (session != null) {
+            return formatLoopLabel(session.isLoopEnabled());
+        }
+        if (blockPos != null) {
+            return formatLoopLabel(false);
+        }
+        var manager = MediaRadioPlugin.getInstance().getPlaybackManager();
+        return formatLoopLabel(manager.isLoopEnabled(playerRef.getUuid()));
     }
 
     private Message formatLoopLabel(boolean enabled) {

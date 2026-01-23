@@ -38,6 +38,8 @@ public class MediaRadioPlugin extends JavaPlugin {
     protected void start() {
         this.getLogger().at(Level.INFO).log("MediaRadioPlugin starting...");
 
+        resetMediaState(resolveRuntimeBasePath());
+
         // Initialize MediaManager
         this.mediaManager = new MediaManager(this);
         this.mediaManager.init();
@@ -141,5 +143,41 @@ public class MediaRadioPlugin extends JavaPlugin {
             return runDir.toAbsolutePath();
         }
         return cwd;
+    }
+
+    private void resetMediaState(Path baseDir) {
+        if (baseDir == null) {
+            return;
+        }
+        Path legacySaved = baseDir.resolve("saved_songs.json");
+        Path cwd = Paths.get("").toAbsolutePath();
+        Path legacySavedCwd = cwd.resolve("saved_songs.json");
+        if (Files.exists(legacySaved) || Files.exists(legacySavedCwd)) {
+            deleteDirectory(baseDir.resolve("media_radio_assets"));
+            this.getLogger().at(Level.INFO).log("MediaRadioPlugin cleaned legacy assets at %s", baseDir);
+        }
+    }
+
+    private void deleteDirectory(Path dir) {
+        if (dir == null || !Files.exists(dir)) {
+            return;
+        }
+        try (java.util.stream.Stream<Path> stream = Files.walk(dir)) {
+            stream.sorted(java.util.Comparator.reverseOrder())
+                    .forEach(this::deleteFile);
+        } catch (Exception e) {
+            this.getLogger().at(Level.WARNING).withCause(e).log("Failed to delete directory %s", dir);
+        }
+    }
+
+    private void deleteFile(Path path) {
+        if (path == null) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(path);
+        } catch (Exception e) {
+            this.getLogger().at(Level.WARNING).withCause(e).log("Failed to delete file %s", path);
+        }
     }
 }

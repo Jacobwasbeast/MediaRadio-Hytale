@@ -7,6 +7,7 @@ import com.hypixel.hytale.assetstore.AssetLoadResult;
 import com.hypixel.hytale.assetstore.AssetUpdateQuery;
 import com.hypixel.hytale.common.plugin.PluginManifest;
 import com.hypixel.hytale.common.semver.Semver;
+import com.hypixel.hytale.math.vector.Vector3i;
 import com.hypixel.hytale.server.core.asset.AssetModule;
 import com.hypixel.hytale.server.core.asset.common.CommonAssetModule;
 import com.hypixel.hytale.server.core.asset.common.CommonAssetRegistry;
@@ -38,35 +39,40 @@ import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 public class MediaManager {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final String RUNTIME_PACK_NAME = "MediaRadioRuntime";
+    private static final String RUNTIME_ASSETS_DIR = "media_radio_assets";
+    private static final String STORAGE_DIR = "songs";
 
     private final MediaRadioPlugin plugin;
     private final Path runtimeAssetsPath;
     private final Path commonAudioPath;
     private final Path serverSoundEventsPath;
     private final Path thumbnailPath;
-    private final Path libraryFile;
+    private final Path storagePath;
+    private final Path songsIndexFile;
     private String ytDlpCommand = "yt-dlp";
 
-    private final Map<String, MediaEntry> mediaLibrary = new HashMap<>();
+    private final Map<String, StoredSong> storedSongs = new ConcurrentHashMap<>();
     private final Map<String, CompletableFuture<MediaInfo>> inFlightRequests = new ConcurrentHashMap<>();
 
     public MediaManager(MediaRadioPlugin plugin) {
         this.plugin = plugin;
         Path baseDir = MediaRadioPlugin.resolveRuntimeBasePath();
-        this.runtimeAssetsPath = baseDir.resolve("media_radio_assets").toAbsolutePath();
+        this.runtimeAssetsPath = baseDir.resolve(RUNTIME_ASSETS_DIR).toAbsolutePath();
+        this.storagePath = baseDir.resolve(STORAGE_DIR).toAbsolutePath();
+        this.songsIndexFile = storagePath.resolve("song_index.json");
         // Pack structure with Common/Server separation matching Vanilla
         // Audio files: Common/Sounds/media_radio/<path>
         this.commonAudioPath = runtimeAssetsPath.resolve("Common/Sounds/media_radio");
         // SoundEvent definitions: Server/Audio/SoundEvents/
         this.serverSoundEventsPath = runtimeAssetsPath.resolve("Server/Audio/SoundEvents");
         this.thumbnailPath = runtimeAssetsPath.resolve("Common/UI/Custom/Pages/MediaRadio/Thumbs");
-        this.libraryFile = resolveLibraryFile(baseDir);
     }
 
     public void init() {
         try {
+            cleanupRuntimeFolders();
             ensureDirectories();
-            loadLibrary();
+            loadSongIndex();
             registerRuntimePack();
             logExternalToolStatus();
             plugin.getLogger().at(Level.INFO).log("MediaManager init completed successfully.");
@@ -79,25 +85,25 @@ public class MediaManager {
         Files.createDirectories(commonAudioPath);
         Files.createDirectories(serverSoundEventsPath);
         Files.createDirectories(thumbnailPath);
+        Files.createDirectories(storagePath);
         plugin.getLogger().at(Level.INFO).log("Ensured directories exist at: %s", runtimeAssetsPath);
     }
 
-    private Path resolveLibraryFile(Path baseDir) {
-        Path target = baseDir.resolve("media_library.json").toAbsolutePath();
-        Path legacy = Paths.get("media_library.json").toAbsolutePath();
-        if (!target.equals(legacy) && Files.exists(legacy) && !Files.exists(target)) {
-            try {
-                Files.createDirectories(target.getParent());
-                Files.move(legacy, target);
-                plugin.getLogger().at(Level.INFO).log("Migrated media library to %s", target);
-                return target;
-            } catch (IOException e) {
-                plugin.getLogger().at(Level.WARNING).withCause(e)
-                        .log("Failed to migrate media library, using legacy path %s", legacy);
-                return legacy;
-            }
+    private void cleanupRuntimeFolders() {
+        deleteDirectory(commonAudioPath);
+        deleteDirectory(serverSoundEventsPath);
+    }
+
+    private void deleteDirectory(Path dir) {
+        if (dir == null || !Files.exists(dir)) {
+            return;
         }
-        return target;
+        try (java.util.stream.Stream<Path> stream = Files.walk(dir)) {
+            stream.sorted(java.util.Comparator.reverseOrder())
+                    .forEach(this::deleteFile);
+        } catch (Exception e) {
+            plugin.getLogger().at(Level.WARNING).withCause(e).log("Failed to delete directory %s", dir);
+        }
     }
 
     private void registerRuntimePack() {
@@ -122,20 +128,28 @@ public class MediaManager {
         }
     }
 
-    private void loadLibrary() {
-        if (Files.exists(libraryFile)) {
-            try (java.io.Reader reader = Files.newBufferedReader(libraryFile)) {
-                java.lang.reflect.Type type = new com.google.gson.reflect.TypeToken<Map<String, MediaEntry>>() {
-                }.getType();
-                Map<String, MediaEntry> loaded = GSON.fromJson(reader, type);
-                if (loaded != null) {
-                    mediaLibrary.putAll(loaded);
-                }
-                plugin.getLogger().at(Level.INFO).log("Loaded media library from %s with %d entries", libraryFile,
-                        mediaLibrary.size());
-            } catch (Exception e) {
-                plugin.getLogger().at(Level.SEVERE).withCause(e).log("Failed to load media library");
+    private void loadSongIndex() {
+        if (!Files.exists(songsIndexFile)) {
+            return;
+        }
+        try (java.io.Reader reader = Files.newBufferedReader(songsIndexFile)) {
+            java.lang.reflect.Type type = new com.google.gson.reflect.TypeToken<Map<String, StoredSong>>() {
+            }.getType();
+            Map<String, StoredSong> loaded = GSON.fromJson(reader, type);
+            if (loaded != null) {
+                storedSongs.putAll(loaded);
             }
+            plugin.getLogger().at(Level.INFO).log("Loaded %d stored songs from %s", storedSongs.size(), songsIndexFile);
+        } catch (Exception e) {
+            plugin.getLogger().at(Level.WARNING).withCause(e).log("Failed to load song index");
+        }
+    }
+
+    private void saveSongIndex() {
+        try (Writer writer = Files.newBufferedWriter(songsIndexFile)) {
+            GSON.toJson(storedSongs, writer);
+        } catch (IOException e) {
+            plugin.getLogger().at(Level.WARNING).withCause(e).log("Failed to save song index");
         }
     }
 
@@ -143,11 +157,7 @@ public class MediaManager {
         String normalizedUrl = normalizeUrl(url);
         String trackId = getTrackIdForUrl(normalizedUrl);
 
-        // If in library, we might have metadata (TODO: Store metadata in
-        // mediaLibrary.json too)
-        // For now, if we have the audio, we assume we want to re-resolve metadata or
-        // just return basic info
-        // Let's rely on re-fetching metadata for freshness or assume basic if failed
+        // If we have the audio stored, we can re-resolve metadata for freshness.
 
         plugin.getLogger().at(Level.INFO).log("Processing media request: %s -> %s", normalizedUrl, trackId);
         return inFlightRequests.computeIfAbsent(trackId, key -> CompletableFuture.supplyAsync(() -> {
@@ -155,43 +165,20 @@ public class MediaManager {
                 // 1. Fetch Metadata first
                 MediaInfo metadata = resolveMetadata(normalizedUrl, trackId);
 
-                // 2. Check if we need to download audio
-                // (Simple check: does the splits exist? For now, re-download/check)
-                if (!Files.exists(commonAudioPath.resolve(trackId + ".ogg"))) {
+                // 2. Ensure the full audio is downloaded to storage
+                Path storedAudio = storagePath.resolve(trackId + ".ogg");
+                if (!Files.exists(storedAudio)) {
                     downloadMedia(normalizedUrl, trackId);
-                    int chunkCount = splitAudio(trackId, 1);
-                    registerCommonSoundAssets(trackId, chunkCount);
-                    createSoundEvents(trackId, chunkCount);
-                    loadSoundEventAssets(trackId, chunkCount);
-                    updateLibrary(trackId, normalizedUrl, chunkCount);
                 }
-
-                int chunkCount = resolveChunkCount(trackId);
-                if (chunkCount == 0) {
-                    chunkCount = splitAudio(trackId, 1);
-                    if (chunkCount > 0) {
-                        registerCommonSoundAssets(trackId, chunkCount);
-                        createSoundEvents(trackId, chunkCount);
-                        loadSoundEventAssets(trackId, chunkCount);
-                        updateLibrary(trackId, normalizedUrl, chunkCount);
-                    }
-                } else if (!mediaLibrary.containsKey(trackId)) {
-                    updateLibrary(trackId, normalizedUrl, chunkCount);
-                }
-
-                if (chunkCount > 0) {
-                    String firstChunkId = String.format("%s_chunk_%03d", trackId, 0);
-                    if (SoundEvent.getAssetMap().getIndex(firstChunkId) < 0) {
-                        registerCommonSoundAssets(trackId, chunkCount);
-                        if (!Files.exists(serverSoundEventsPath.resolve(firstChunkId + ".json"))) {
-                            createSoundEvents(trackId, chunkCount);
-                        }
-                        loadSoundEventAssets(trackId, chunkCount);
-                    }
+                StoredSong stored = storedSongs.get(trackId);
+                if (stored == null) {
+                    storedSongs.put(trackId, new StoredSong(trackId, normalizedUrl, metadata.title, metadata.artist,
+                            metadata.duration));
+                    saveSongIndex();
                 }
                 String thumbnailAssetPath = ensureThumbnail(normalizedUrl, trackId);
                 return new MediaInfo(trackId, normalizedUrl, metadata.title, metadata.artist, metadata.thumbnailUrl,
-                        metadata.duration, chunkCount, thumbnailAssetPath);
+                        metadata.duration, 0, thumbnailAssetPath);
             } catch (Exception e) {
                 String message = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
                 plugin.getLogger().at(Level.SEVERE).withCause(e).log("Failed to process media request: %s", message);
@@ -237,8 +224,8 @@ public class MediaManager {
     private void downloadMedia(String url, String trackId) throws Exception {
         // Don't include extension in -o template - yt-dlp adds it automatically with
         // --audio-format
-        Path outputPathBase = commonAudioPath.resolve(trackId);
-        Path expectedOutputPath = commonAudioPath.resolve(trackId + ".ogg");
+        Path outputPathBase = storagePath.resolve(trackId);
+        Path expectedOutputPath = storagePath.resolve(trackId + ".ogg");
 
         // Command: yt-dlp -x --audio-format vorbis --audio-quality 0 -o "trackId" "url"
         // yt-dlp will create "trackId.ogg" after audio extraction
@@ -276,19 +263,24 @@ public class MediaManager {
         }
     }
 
-    private int splitAudio(String trackId, int segmentDuration) throws Exception {
-        Path inputFile = commonAudioPath.resolve(trackId + ".ogg");
+    private int splitAudio(String trackId, double segmentDuration) throws Exception {
+        Path inputFile = storagePath.resolve(trackId + ".ogg");
         // Output pattern: trackId_chunk_000.ogg
         String outputPattern = commonAudioPath.resolve(trackId + "_chunk_%03d.ogg").toString();
 
-        plugin.getLogger().at(Level.INFO).log("Splitting audio %s into %ds chunks...", trackId, segmentDuration);
+        plugin.getLogger().at(Level.INFO).log("Splitting audio %s into %.1fms chunks...", trackId,
+                segmentDuration * 1000.0);
 
         ProcessBuilder pb = new ProcessBuilder(
                 "ffmpeg",
                 "-i", inputFile.toString(),
+                "-map", "0:a:0",
                 "-f", "segment",
                 "-segment_time", String.valueOf(segmentDuration),
-                "-c", "copy", // Fast split without re-encoding
+                "-reset_timestamps", "1",
+                "-ac", "1",
+                "-c:a", "libvorbis",
+                "-q:a", "4",
                 outputPattern);
 
         pb.redirectErrorStream(true);
@@ -358,7 +350,7 @@ public class MediaManager {
             soundEvent.put("Pitch", 0.0);
             soundEvent.put("MaxDistance", 60); // 60 blocks audible distance
             soundEvent.put("StartAttenuationDistance", 10);
-            soundEvent.put("AudioCategory", "AudioCat_Music");
+            soundEvent.put("Parent", "SFX_Attn_Quiet");
 
             try (Writer writer = Files.newBufferedWriter(jsonPath)) {
                 GSON.toJson(soundEvent, writer);
@@ -451,18 +443,99 @@ public class MediaManager {
         if (playerRef == null) {
             return;
         }
+        prepareRuntimeAssetsAsync(mediaInfo, 750).thenAccept(totalChunks -> {
+            if (totalChunks <= 0) {
+                plugin.getLogger().at(Level.WARNING).log("No chunks available for %s", mediaInfo.trackId);
+                return;
+            }
+            store.getExternalData().getWorld().execute(() -> {
+                MediaInfo updated = withChunkCount(mediaInfo, totalChunks);
+                plugin.getPlaybackManager().playForPlayer(updated, playerRef, totalChunks, 750, store);
+            });
+        });
+    }
 
-        int totalChunks = mediaInfo.chunkCount;
-        if (totalChunks <= 0) {
-            plugin.getLogger().at(Level.WARNING).log("Track info not found in library: %s", mediaInfo.trackId);
+    public void playSoundAtBlock(MediaInfo mediaInfo, Vector3i blockPos, int chunkDurationMs,
+            Store<EntityStore> store) {
+        if (mediaInfo == null || blockPos == null) {
             return;
         }
-
-        plugin.getPlaybackManager().playForPlayer(mediaInfo, playerRef, totalChunks, 990, store);
+        prepareRuntimeAssetsAsync(mediaInfo, chunkDurationMs).thenAccept(totalChunks -> {
+            if (totalChunks <= 0) {
+                plugin.getLogger().at(Level.WARNING).log("No chunks available for %s", mediaInfo.trackId);
+                return;
+            }
+            store.getExternalData().getWorld().execute(() -> {
+                MediaInfo updated = withChunkCount(mediaInfo, totalChunks);
+                plugin.getPlaybackManager().playAtBlock(updated, blockPos, chunkDurationMs, store);
+            });
+        });
     }
 
     public int getChunkCount(String trackId) {
         return resolveChunkCount(trackId);
+    }
+
+    private CompletableFuture<Integer> prepareRuntimeAssetsAsync(MediaInfo mediaInfo, int chunkDurationMs) {
+        return CompletableFuture.supplyAsync(
+                () -> ensureRuntimeAssets(mediaInfo, chunkDurationMs),
+                com.hypixel.hytale.server.core.HytaleServer.SCHEDULED_EXECUTOR);
+    }
+
+    private MediaInfo withChunkCount(MediaInfo mediaInfo, int chunkCount) {
+        return new MediaInfo(
+                mediaInfo.trackId,
+                mediaInfo.url,
+                mediaInfo.title,
+                mediaInfo.artist,
+                mediaInfo.thumbnailUrl,
+                mediaInfo.duration,
+                chunkCount,
+                mediaInfo.thumbnailAssetPath);
+    }
+
+    private int ensureRuntimeAssets(MediaInfo mediaInfo, int chunkDurationMs) {
+        if (mediaInfo == null) {
+            return 0;
+        }
+        String trackId = mediaInfo.trackId;
+        Path storedAudio = storagePath.resolve(trackId + ".ogg");
+        if (!Files.exists(storedAudio)) {
+            try {
+                downloadMedia(mediaInfo.url, trackId);
+            } catch (Exception e) {
+                plugin.getLogger().at(Level.WARNING).withCause(e)
+                        .log("Failed to download audio for %s", trackId);
+                return 0;
+            }
+        }
+
+        int chunkCount = resolveChunkCount(trackId);
+        if (chunkCount <= 0) {
+            try {
+                double seconds = Math.max(0.1, chunkDurationMs / 1000.0);
+                chunkCount = splitAudio(trackId, seconds);
+                if (chunkCount > 0) {
+                    registerCommonSoundAssets(trackId, chunkCount);
+                    createSoundEvents(trackId, chunkCount);
+                    loadSoundEventAssets(trackId, chunkCount);
+                }
+            } catch (Exception e) {
+                plugin.getLogger().at(Level.WARNING).withCause(e)
+                        .log("Failed to prepare runtime assets for %s", trackId);
+                return 0;
+            }
+        } else {
+            String firstChunkId = String.format("%s_chunk_%03d", trackId, 0);
+            if (SoundEvent.getAssetMap().getIndex(firstChunkId) < 0) {
+                registerCommonSoundAssets(trackId, chunkCount);
+                if (!Files.exists(serverSoundEventsPath.resolve(firstChunkId + ".json"))) {
+                    createSoundEvents(trackId, chunkCount);
+                }
+                loadSoundEventAssets(trackId, chunkCount);
+            }
+        }
+        return chunkCount;
     }
 
     public String getTrackIdForUrl(String url) {
@@ -724,31 +797,11 @@ public class MediaManager {
     }
 
     private int resolveChunkCount(String trackId) {
-        MediaEntry entry = mediaLibrary.get(trackId);
-        if (entry != null && entry.chunkCount > 0
-                && Files.exists(commonAudioPath.resolve(String.format("%s_chunk_%03d.ogg", trackId, 0)))) {
-            return entry.chunkCount;
-        }
-
         int chunkCount = 0;
         while (Files.exists(commonAudioPath.resolve(String.format("%s_chunk_%03d.ogg", trackId, chunkCount)))) {
             chunkCount++;
         }
         return chunkCount;
-    }
-
-    private void updateLibrary(String trackId, String url, int chunkCount) {
-        MediaEntry entry = new MediaEntry(url, "AUDIO", chunkCount);
-        mediaLibrary.put(trackId, entry);
-        saveMediaLibrary();
-    }
-
-    private void saveMediaLibrary() {
-        try (Writer writer = Files.newBufferedWriter(libraryFile)) {
-            GSON.toJson(mediaLibrary, writer);
-        } catch (IOException e) {
-            plugin.getLogger().at(Level.SEVERE).withCause(e).log("Failed to save media library");
-        }
     }
 
     public CompletableFuture<Void> deleteMediaForUrl(String url) {
@@ -766,13 +819,11 @@ public class MediaManager {
         }
         String trackId = getTrackIdForUrl(url);
         return CompletableFuture.runAsync(() -> {
-            deleteMediaAssets(trackId);
-            mediaLibrary.remove(trackId);
-            saveMediaLibrary();
+            cleanupRuntimeAssets(trackId);
         }, com.hypixel.hytale.server.core.HytaleServer.SCHEDULED_EXECUTOR);
     }
 
-    private void deleteMediaAssets(String trackId) {
+    public void cleanupRuntimeAssets(String trackId) {
         int chunkCount = resolveChunkCount(trackId);
         for (int i = 0; i < chunkCount; i++) {
             String fileName = String.format("%s_chunk_%03d.ogg", trackId, i);
@@ -786,12 +837,6 @@ public class MediaManager {
             removeSoundEventAsset(jsonPath);
             deleteFile(jsonPath);
         }
-
-        Path fullAudio = commonAudioPath.resolve(trackId + ".ogg");
-        deleteCommonAsset("Sounds/media_radio/" + trackId + ".ogg", fullAudio);
-
-        Path thumbPath = thumbnailPath.resolve(trackId + ".png");
-        deleteCommonAsset(getThumbnailAssetPath(trackId), thumbPath);
     }
 
     private void removeSoundEventAsset(Path jsonPath) {
@@ -955,19 +1000,23 @@ public class MediaManager {
         return pathEnv != null ? pathEnv : "";
     }
 
-    public static class MediaEntry {
-        String source;
-        String type;
-        int chunkCount;
+    public static class StoredSong {
+        public String trackId;
+        public String url;
+        public String title;
+        public String artist;
+        public long duration;
 
-        public MediaEntry(String source, String type) {
-            this(source, type, 0);
+        public StoredSong() {
         }
 
-        public MediaEntry(String source, String type, int chunkCount) {
-            this.source = source;
-            this.type = type;
-            this.chunkCount = chunkCount;
+        public StoredSong(String trackId, String url, String title, String artist, long duration) {
+            this.trackId = trackId;
+            this.url = url;
+            this.title = title;
+            this.artist = artist;
+            this.duration = duration;
         }
     }
+
 }
