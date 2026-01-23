@@ -550,7 +550,7 @@ public class MediaPlaybackManager {
         }
         MediaManager manager = plugin.getMediaManager();
         if (manager != null) {
-            manager.cleanupRuntimeAssets(trackId);
+            manager.cleanupRuntimeAssetsAsync(trackId);
         }
     }
 

@@ -327,10 +327,107 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                 store.getExternalData().getWorld().execute(() -> {
                     // Start playback
                     if (blockPos != null) {
+                        if (library != null) {
+                            library.upsertSongStatus(
+                                    playerRef.getUuid().toString(),
+                                    mediaInfo.url,
+                                    "Preparing...",
+                                    mediaInfo.title != null ? mediaInfo.title : "Unknown Title",
+                                    mediaInfo.artist != null ? mediaInfo.artist : "Unknown Artist",
+                                    mediaInfo.thumbnailUrl != null ? mediaInfo.thumbnailUrl : "",
+                                    mediaInfo.duration,
+                                    mediaInfo.trackId,
+                                    mediaInfo.thumbnailAssetPath);
+                            player.getPageManager().openCustomPage(ref, store, new RadioConfigPage(playerRef, blockPos));
+                        }
                         MediaRadioPlugin.getInstance().getMediaManager()
-                                .playSoundAtBlock(mediaInfo, blockPos, 750, store);
+                                .playSoundAtBlock(mediaInfo, blockPos, 750, store)
+                                .thenRun(() -> store.getExternalData().getWorld().execute(() -> {
+                                    if (library != null) {
+                                        library.upsertSongStatus(
+                                                playerRef.getUuid().toString(),
+                                                mediaInfo.url,
+                                                "Playing",
+                                                mediaInfo.title != null ? mediaInfo.title : "Unknown Title",
+                                                mediaInfo.artist != null ? mediaInfo.artist : "Unknown Artist",
+                                                mediaInfo.thumbnailUrl != null ? mediaInfo.thumbnailUrl : "",
+                                                mediaInfo.duration,
+                                                mediaInfo.trackId,
+                                                mediaInfo.thumbnailAssetPath);
+                                        player.getPageManager().openCustomPage(ref, store,
+                                                new RadioConfigPage(playerRef, blockPos));
+                                    }
+                                }))
+                                .exceptionally(ex -> {
+                                    store.getExternalData().getWorld().execute(() -> {
+                                        if (library != null) {
+                                            library.upsertSongStatus(
+                                                    playerRef.getUuid().toString(),
+                                                    mediaInfo.url,
+                                                    "Failed",
+                                                    mediaInfo.title != null ? mediaInfo.title : "Unknown Title",
+                                                    mediaInfo.artist != null ? mediaInfo.artist : "Unknown Artist",
+                                                    mediaInfo.thumbnailUrl != null ? mediaInfo.thumbnailUrl : "",
+                                                    mediaInfo.duration,
+                                                    mediaInfo.trackId,
+                                                    mediaInfo.thumbnailAssetPath);
+                                            player.getPageManager().openCustomPage(ref, store,
+                                                    new RadioConfigPage(playerRef, blockPos));
+                                        }
+                                    });
+                                    return null;
+                                });
                     } else {
-                        MediaRadioPlugin.getInstance().getMediaManager().playSound(mediaInfo, playerRef, store);
+                        if (library != null) {
+                            library.upsertSongStatus(
+                                    playerRef.getUuid().toString(),
+                                    mediaInfo.url,
+                                    "Preparing...",
+                                    mediaInfo.title != null ? mediaInfo.title : "Unknown Title",
+                                    mediaInfo.artist != null ? mediaInfo.artist : "Unknown Artist",
+                                    mediaInfo.thumbnailUrl != null ? mediaInfo.thumbnailUrl : "",
+                                    mediaInfo.duration,
+                                    mediaInfo.trackId,
+                                    mediaInfo.thumbnailAssetPath);
+                            player.getPageManager().openCustomPage(ref, store, new RadioConfigPage(playerRef, blockPos));
+                        }
+                        MediaRadioPlugin.getInstance().getMediaManager()
+                                .playSound(mediaInfo, playerRef, store)
+                                .thenRun(() -> store.getExternalData().getWorld().execute(() -> {
+                                    if (library != null) {
+                                        library.upsertSongStatus(
+                                                playerRef.getUuid().toString(),
+                                                mediaInfo.url,
+                                                "Playing",
+                                                mediaInfo.title != null ? mediaInfo.title : "Unknown Title",
+                                                mediaInfo.artist != null ? mediaInfo.artist : "Unknown Artist",
+                                                mediaInfo.thumbnailUrl != null ? mediaInfo.thumbnailUrl : "",
+                                                mediaInfo.duration,
+                                                mediaInfo.trackId,
+                                                mediaInfo.thumbnailAssetPath);
+                                        player.getPageManager().openCustomPage(ref, store,
+                                                new RadioConfigPage(playerRef, blockPos));
+                                    }
+                                }))
+                                .exceptionally(ex -> {
+                                    store.getExternalData().getWorld().execute(() -> {
+                                        if (library != null) {
+                                            library.upsertSongStatus(
+                                                    playerRef.getUuid().toString(),
+                                                    mediaInfo.url,
+                                                    "Failed",
+                                                    mediaInfo.title != null ? mediaInfo.title : "Unknown Title",
+                                                    mediaInfo.artist != null ? mediaInfo.artist : "Unknown Artist",
+                                                    mediaInfo.thumbnailUrl != null ? mediaInfo.thumbnailUrl : "",
+                                                    mediaInfo.duration,
+                                                    mediaInfo.trackId,
+                                                    mediaInfo.thumbnailAssetPath);
+                                            player.getPageManager().openCustomPage(ref, store,
+                                                    new RadioConfigPage(playerRef, blockPos));
+                                        }
+                                    });
+                                    return null;
+                                });
                     }
 
                     // Save to library
@@ -338,7 +435,7 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                         library.upsertSongStatus(
                                 playerRef.getUuid().toString(),
                                 mediaInfo.url,
-                                "Ready",
+                                "Queued",
                                 mediaInfo.title != null ? mediaInfo.title : "Unknown Title",
                                 mediaInfo.artist != null ? mediaInfo.artist : "Unknown Artist",
                                 mediaInfo.thumbnailUrl != null ? mediaInfo.thumbnailUrl : "",

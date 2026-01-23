@@ -265,8 +265,8 @@ public class MediaManager {
 
     private int splitAudio(String trackId, double segmentDuration) throws Exception {
         Path inputFile = storagePath.resolve(trackId + ".ogg");
-        // Output pattern: trackId_chunk_000.ogg
-        String outputPattern = commonAudioPath.resolve(trackId + "_chunk_%03d.ogg").toString();
+        // Output pattern: trackId_Chunk_000.ogg
+        String outputPattern = commonAudioPath.resolve(trackId + "_Chunk_%03d.ogg").toString();
 
         plugin.getLogger().at(Level.INFO).log("Splitting audio %s into %.1fms chunks...", trackId,
                 segmentDuration * 1000.0);
@@ -306,8 +306,8 @@ public class MediaManager {
 
         // Count generated chunks
         int chunkCount = 0;
-        while (Files.exists(commonAudioPath.resolve(String.format("%s_chunk_%03d.ogg", trackId, chunkCount)))) {
-            Path chunkPath = commonAudioPath.resolve(String.format("%s_chunk_%03d.ogg", trackId, chunkCount));
+        while (Files.exists(commonAudioPath.resolve(String.format("%s_Chunk_%03d.ogg", trackId, chunkCount)))) {
+            Path chunkPath = commonAudioPath.resolve(String.format("%s_Chunk_%03d.ogg", trackId, chunkCount));
             // Touch file to trigger watcher
             try {
                 Files.setLastModifiedTime(chunkPath,
@@ -334,11 +334,11 @@ public class MediaManager {
     private void createSoundEvents(String trackId, int chunkCount) {
         // Create SoundEvent for each chunk
         for (int i = 0; i < chunkCount; i++) {
-            String chunkTrackId = String.format("%s_chunk_%03d", trackId, i);
+            String chunkTrackId = String.format("%s_Chunk_%03d", trackId, i);
             Path jsonPath = serverSoundEventsPath.resolve(chunkTrackId + ".json");
 
-            // Map file path: Sounds/media_radio/trackId_chunk_000.ogg
-            String soundFilePath = String.format("Sounds/media_radio/%s_chunk_%03d.ogg", trackId, i);
+            // Map file path: Sounds/media_radio/trackId_Chunk_000.ogg
+            String soundFilePath = String.format("Sounds/media_radio/%s_Chunk_%03d.ogg", trackId, i);
 
             Map<String, Object> layer = new HashMap<>();
             layer.put("Files", Collections.singletonList(soundFilePath));
@@ -373,7 +373,7 @@ public class MediaManager {
         }
 
         for (int i = 0; i < chunkCount; i++) {
-            String fileName = String.format("%s_chunk_%03d.ogg", trackId, i);
+            String fileName = String.format("%s_Chunk_%03d.ogg", trackId, i);
             Path chunkPath = commonAudioPath.resolve(fileName);
             if (!Files.exists(chunkPath)) {
                 continue;
@@ -397,7 +397,7 @@ public class MediaManager {
         }
         java.util.List<Path> paths = new java.util.ArrayList<>(chunkCount);
         for (int i = 0; i < chunkCount; i++) {
-            String chunkTrackId = String.format("%s_chunk_%03d", trackId, i);
+            String chunkTrackId = String.format("%s_Chunk_%03d", trackId, i);
             Path jsonPath = serverSoundEventsPath.resolve(chunkTrackId + ".json");
             if (Files.exists(jsonPath)) {
                 paths.add(jsonPath);
@@ -439,37 +439,51 @@ public class MediaManager {
         }
     }
 
-    public void playSound(MediaInfo mediaInfo, PlayerRef playerRef, Store<EntityStore> store) {
+    public CompletableFuture<Void> playSound(MediaInfo mediaInfo, PlayerRef playerRef, Store<EntityStore> store) {
         if (playerRef == null) {
-            return;
+            return CompletableFuture.completedFuture(null);
         }
+        CompletableFuture<Void> result = new CompletableFuture<>();
         prepareRuntimeAssetsAsync(mediaInfo, 750).thenAccept(totalChunks -> {
             if (totalChunks <= 0) {
                 plugin.getLogger().at(Level.WARNING).log("No chunks available for %s", mediaInfo.trackId);
+                result.complete(null);
                 return;
             }
             store.getExternalData().getWorld().execute(() -> {
                 MediaInfo updated = withChunkCount(mediaInfo, totalChunks);
                 plugin.getPlaybackManager().playForPlayer(updated, playerRef, totalChunks, 750, store);
+                result.complete(null);
             });
+        }).exceptionally(ex -> {
+            result.completeExceptionally(ex);
+            return null;
         });
+        return result;
     }
 
-    public void playSoundAtBlock(MediaInfo mediaInfo, Vector3i blockPos, int chunkDurationMs,
+    public CompletableFuture<Void> playSoundAtBlock(MediaInfo mediaInfo, Vector3i blockPos, int chunkDurationMs,
             Store<EntityStore> store) {
         if (mediaInfo == null || blockPos == null) {
-            return;
+            return CompletableFuture.completedFuture(null);
         }
+        CompletableFuture<Void> result = new CompletableFuture<>();
         prepareRuntimeAssetsAsync(mediaInfo, chunkDurationMs).thenAccept(totalChunks -> {
             if (totalChunks <= 0) {
                 plugin.getLogger().at(Level.WARNING).log("No chunks available for %s", mediaInfo.trackId);
+                result.complete(null);
                 return;
             }
             store.getExternalData().getWorld().execute(() -> {
                 MediaInfo updated = withChunkCount(mediaInfo, totalChunks);
                 plugin.getPlaybackManager().playAtBlock(updated, blockPos, chunkDurationMs, store);
+                result.complete(null);
             });
+        }).exceptionally(ex -> {
+            result.completeExceptionally(ex);
+            return null;
         });
+        return result;
     }
 
     public int getChunkCount(String trackId) {
@@ -526,7 +540,7 @@ public class MediaManager {
                 return 0;
             }
         } else {
-            String firstChunkId = String.format("%s_chunk_%03d", trackId, 0);
+            String firstChunkId = String.format("%s_Chunk_%03d", trackId, 0);
             if (SoundEvent.getAssetMap().getIndex(firstChunkId) < 0) {
                 registerCommonSoundAssets(trackId, chunkCount);
                 if (!Files.exists(serverSoundEventsPath.resolve(firstChunkId + ".json"))) {
@@ -557,7 +571,18 @@ public class MediaManager {
             throw new RuntimeException("SHA-256 not supported", e);
         }
 
-        return "Track_" + hash;
+        return "Track_" + capitalizeFirst(hash);
+    }
+
+    private String capitalizeFirst(String value) {
+        if (value == null || value.isEmpty()) {
+            return "";
+        }
+        char first = value.charAt(0);
+        if (Character.isUpperCase(first)) {
+            return value;
+        }
+        return Character.toUpperCase(first) + value.substring(1);
     }
 
     public String normalizeUrl(String url) {
@@ -798,7 +823,7 @@ public class MediaManager {
 
     private int resolveChunkCount(String trackId) {
         int chunkCount = 0;
-        while (Files.exists(commonAudioPath.resolve(String.format("%s_chunk_%03d.ogg", trackId, chunkCount)))) {
+        while (Files.exists(commonAudioPath.resolve(String.format("%s_Chunk_%03d.ogg", trackId, chunkCount)))) {
             chunkCount++;
         }
         return chunkCount;
@@ -826,17 +851,23 @@ public class MediaManager {
     public void cleanupRuntimeAssets(String trackId) {
         int chunkCount = resolveChunkCount(trackId);
         for (int i = 0; i < chunkCount; i++) {
-            String fileName = String.format("%s_chunk_%03d.ogg", trackId, i);
+            String fileName = String.format("%s_Chunk_%03d.ogg", trackId, i);
             Path chunkPath = commonAudioPath.resolve(fileName);
             deleteCommonAsset("Sounds/media_radio/" + fileName, chunkPath);
         }
 
         for (int i = 0; i < chunkCount; i++) {
-            String chunkTrackId = String.format("%s_chunk_%03d", trackId, i);
+            String chunkTrackId = String.format("%s_Chunk_%03d", trackId, i);
             Path jsonPath = serverSoundEventsPath.resolve(chunkTrackId + ".json");
             removeSoundEventAsset(jsonPath);
             deleteFile(jsonPath);
         }
+    }
+
+    public void cleanupRuntimeAssetsAsync(String trackId) {
+        CompletableFuture.runAsync(
+                () -> cleanupRuntimeAssets(trackId),
+                com.hypixel.hytale.server.core.HytaleServer.SCHEDULED_EXECUTOR);
     }
 
     private void removeSoundEventAsset(Path jsonPath) {

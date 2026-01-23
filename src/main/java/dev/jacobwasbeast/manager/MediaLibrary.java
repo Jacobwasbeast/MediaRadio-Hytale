@@ -66,6 +66,25 @@ public class MediaLibrary {
         }
     }
 
+    public void resetTransientStatuses() {
+        boolean changed = false;
+        for (List<SavedSong> list : songsByPlayer.values()) {
+            for (SavedSong song : list) {
+                if (song == null || song.status == null) {
+                    continue;
+                }
+                String status = song.status.toLowerCase();
+                if ("playing".equals(status) || "preparing...".equals(status) || "queued".equals(status)) {
+                    song.status = "Ready";
+                    changed = true;
+                }
+            }
+        }
+        if (changed) {
+            save();
+        }
+    }
+
     private File resolveLibraryFile() {
         Path baseDir = MediaRadioPlugin.resolveRuntimeBasePath();
         Path target = baseDir.resolve("songs.json").toAbsolutePath();

@@ -47,6 +47,7 @@ public class MediaRadioPlugin extends JavaPlugin {
 
         // Initialize MediaLibrary
         this.mediaLibrary = new dev.jacobwasbeast.manager.MediaLibrary(this);
+        this.mediaLibrary.resetTransientStatuses();
         this.getLogger().at(Level.INFO).log("MediaLibrary initialized.");
 
         // Initialize MediaPlaybackManager

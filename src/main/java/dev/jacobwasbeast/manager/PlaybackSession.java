@@ -325,7 +325,7 @@ public class PlaybackSession {
      * Get the chunk filename for a given chunk index
      */
     public String getChunkTrackId(int chunkIndex) {
-        return trackId + "_chunk_" + String.format("%03d", chunkIndex);
+        return trackId + "_Chunk_" + String.format("%03d", chunkIndex);
     }
 
     /**
