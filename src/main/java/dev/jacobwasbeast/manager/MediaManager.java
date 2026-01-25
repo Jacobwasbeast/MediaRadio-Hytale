@@ -271,8 +271,14 @@ public class MediaManager {
         plugin.getLogger().at(Level.INFO).log("Splitting audio %s into %.1fms chunks...", trackId,
                 segmentDuration * 1000.0);
 
+        String ffmpegCommand = resolveFfmpegCommand();
+        if (ffmpegCommand == null) {
+            throw new RuntimeException(
+                    "ffmpeg not available. Run /setup_radio and place it at " + getExpectedFfmpegPath());
+        }
+
         ProcessBuilder pb = new ProcessBuilder(
-                "ffmpeg",
+                ffmpegCommand,
                 "-i", inputFile.toString(),
                 "-map", "0:a:0",
                 "-f", "segment",
@@ -419,7 +425,8 @@ public class MediaManager {
 
     private void touchSoundEvent(Path jsonPath) {
         try {
-            Files.setLastModifiedTime(jsonPath, java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis()));
+            Files.setLastModifiedTime(jsonPath,
+                    java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis()));
         } catch (IOException ignored) {
         }
     }
@@ -447,7 +454,7 @@ public class MediaManager {
         prepareRuntimeAssetsAsync(mediaInfo, 750).thenAccept(totalChunks -> {
             if (totalChunks <= 0) {
                 plugin.getLogger().at(Level.WARNING).log("No chunks available for %s", mediaInfo.trackId);
-                result.complete(null);
+                result.completeExceptionally(new RuntimeException("Failed to prepare media assets (0 chunks)"));
                 return;
             }
             store.getExternalData().getWorld().execute(() -> {
@@ -471,7 +478,7 @@ public class MediaManager {
         prepareRuntimeAssetsAsync(mediaInfo, chunkDurationMs).thenAccept(totalChunks -> {
             if (totalChunks <= 0) {
                 plugin.getLogger().at(Level.WARNING).log("No chunks available for %s", mediaInfo.trackId);
-                result.complete(null);
+                result.completeExceptionally(new RuntimeException("Failed to prepare media assets (0 chunks)"));
                 return;
             }
             store.getExternalData().getWorld().execute(() -> {
@@ -746,8 +753,13 @@ public class MediaManager {
             }
 
             if (!downloaded.getFileName().toString().endsWith(".png")) {
+                String ffmpegCommand = resolveFfmpegCommand();
+                if (ffmpegCommand == null) {
+                    plugin.getLogger().at(Level.WARNING).log("ffmpeg not available for thumbnail conversion.");
+                    return "";
+                }
                 ProcessBuilder ffmpeg = new ProcessBuilder(
-                        "ffmpeg",
+                        ffmpegCommand,
                         "-y",
                         "-i", downloaded.toString(),
                         pngPath.toString());
@@ -800,7 +812,8 @@ public class MediaManager {
         } catch (IOException ignored) {
         }
         try {
-            Files.setLastModifiedTime(thumbnailPath, java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis()));
+            Files.setLastModifiedTime(thumbnailPath,
+                    java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis()));
         } catch (IOException ignored) {
         }
     }
@@ -1013,6 +1026,17 @@ public class MediaManager {
             return "yt-dlp_macos";
         }
         return "yt-dlp";
+    }
+
+    private String resolveFfmpegCommand() {
+        if (isToolAvailable("ffmpeg", "-version")) {
+            return "ffmpeg";
+        }
+        Path expected = getExpectedFfmpegPath();
+        if (Files.exists(expected)) {
+            return expected.toString();
+        }
+        return null;
     }
 
     private String resolveFfmpegAssetName() {
