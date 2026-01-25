@@ -14,7 +14,7 @@ import com.hypixel.hytale.server.core.asset.common.CommonAssetRegistry;
 import com.hypixel.hytale.server.core.asset.common.asset.FileCommonAsset;
 import com.hypixel.hytale.server.core.asset.type.soundevent.config.SoundEvent;
 import dev.jacobwasbeast.MediaRadioPlugin;
-import dev.jacobwasbeast.manager.MediaLibrary;
+
 import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
@@ -49,7 +49,6 @@ public class MediaManager {
     private final Path thumbnailPath;
     private final Path storagePath;
     private final Path songsIndexFile;
-    private String ytDlpCommand = "yt-dlp";
 
     private final Map<String, StoredSong> storedSongs = new ConcurrentHashMap<>();
     private final Map<String, CompletableFuture<MediaInfo>> inFlightRequests = new ConcurrentHashMap<>();
@@ -229,13 +228,32 @@ public class MediaManager {
 
         // Command: yt-dlp -x --audio-format vorbis --audio-quality 0 -o "trackId" "url"
         // yt-dlp will create "trackId.ogg" after audio extraction
-        ProcessBuilder pb = new ProcessBuilder(
-                requireYtDlpCommand(),
-                "-x",
-                "--audio-format", "vorbis",
-                "--audio-quality", "0",
-                "-o", outputPathBase.toString(),
-                url);
+        java.util.List<String> command = new java.util.ArrayList<>();
+        command.add(requireYtDlpCommand());
+        command.add("-x");
+        command.add("--audio-format");
+        command.add("vorbis");
+        command.add("--audio-quality");
+        command.add("0");
+
+        String ffmpegCmd = resolveFfmpegCommand();
+        if (ffmpegCmd != null && !ffmpegCmd.equals("ffmpeg")) {
+            // If it's a path to the executable, we need to pass the directory
+            Path ffmpegPath = Paths.get(ffmpegCmd);
+            if (Files.isRegularFile(ffmpegPath)) {
+                // Pass the directory containing ffmpeg/ffprobe
+                command.add("--ffmpeg-location");
+                command.add(ffmpegPath.getParent().toString());
+            }
+        }
+
+        command.add("-o");
+        command.add(outputPathBase.toString());
+        command.add(url);
+
+        plugin.getLogger().at(Level.INFO).log("Executing yt-dlp command: %s", String.join(" ", command));
+
+        ProcessBuilder pb = new ProcessBuilder(command);
 
         pb.redirectErrorStream(true);
         Process process;
@@ -966,7 +984,7 @@ public class MediaManager {
     }
 
     private void ensureYtDlpAvailable() {
-        ytDlpCommand = resolveYtDlpCommand();
+        resolveYtDlpCommand();
     }
 
     private boolean isToolAvailable(String tool, String versionArg) {
@@ -987,7 +1005,6 @@ public class MediaManager {
             throw new RuntimeException(
                     "yt-dlp not available. Run /setup_radio and place it at " + getExpectedYtDlpPath());
         }
-        ytDlpCommand = resolved;
         return resolved;
     }
 
