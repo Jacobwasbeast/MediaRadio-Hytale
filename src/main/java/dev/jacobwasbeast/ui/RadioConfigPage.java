@@ -57,7 +57,8 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
         // Populate Now Playing
         PlaybackSession session = resolveSession();
         if (session != null && !session.isStopped()) {
-            commandBuilder.set("#NowPlayingTitle.Text", session.getTitle().isEmpty() ? "Unknown Title" : session.getTitle());
+            commandBuilder.set("#NowPlayingTitle.Text",
+                    session.getTitle().isEmpty() ? "Unknown Title" : session.getTitle());
             commandBuilder.set("#NowPlayingArtist.Text", session.getArtist());
             commandBuilder.set("#PauseButton.Text", session.isPaused() ? "Resume" : "Pause");
             commandBuilder.set("#NowPlayingTime.Text", formatTime(session.getCurrentPositionMs()) + " / "
@@ -209,9 +210,9 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                 var session = blockPos != null ? manager.getSession(blockPos) : manager.getSession(playerRef.getUuid());
                 if (session != null && finalRemoveUrl != null && finalRemoveUrl.equals(session.getUrl())) {
                     if (blockPos != null) {
-                        manager.stop(blockPos);
+                        manager.stop(blockPos, store);
                     } else {
-                        manager.stop(playerRef);
+                        manager.stop(playerRef, store);
                     }
                 }
                 player.getPageManager().openCustomPage(ref, store, new RadioConfigPage(playerRef, blockPos));
@@ -246,9 +247,9 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
             data.action = null; // Consume
             store.getExternalData().getWorld().execute(() -> {
                 if (blockPos != null) {
-                    MediaRadioPlugin.getInstance().getPlaybackManager().stop(blockPos);
+                    MediaRadioPlugin.getInstance().getPlaybackManager().stop(blockPos, store);
                 } else {
-                    MediaRadioPlugin.getInstance().getPlaybackManager().stop(playerRef);
+                    MediaRadioPlugin.getInstance().getPlaybackManager().stop(playerRef, store);
                 }
                 player.sendMessage(Message.translation("Stopped playback."));
                 player.getPageManager().openCustomPage(ref, store, new RadioConfigPage(playerRef, blockPos));
@@ -317,7 +318,8 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
             data.directUrl = null;
             var library = MediaRadioPlugin.getInstance().getMediaLibrary();
             if (library != null) {
-                library.upsertSongStatus(playerRef.getUuid().toString(), finalUrl, "Downloading...", null, null, null, 0, null,
+                library.upsertSongStatus(playerRef.getUuid().toString(), finalUrl, "Downloading...", null, null, null,
+                        0, null,
                         null);
                 player.getPageManager().openCustomPage(ref, store, new RadioConfigPage(playerRef, blockPos));
             }
@@ -338,7 +340,8 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                                     mediaInfo.duration,
                                     mediaInfo.trackId,
                                     mediaInfo.thumbnailAssetPath);
-                            player.getPageManager().openCustomPage(ref, store, new RadioConfigPage(playerRef, blockPos));
+                            player.getPageManager().openCustomPage(ref, store,
+                                    new RadioConfigPage(playerRef, blockPos));
                         }
                         MediaRadioPlugin.getInstance().getMediaManager()
                                 .playSoundAtBlock(mediaInfo, blockPos, 750, store)
@@ -392,7 +395,8 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                                     mediaInfo.duration,
                                     mediaInfo.trackId,
                                     mediaInfo.thumbnailAssetPath);
-                            player.getPageManager().openCustomPage(ref, store, new RadioConfigPage(playerRef, blockPos));
+                            player.getPageManager().openCustomPage(ref, store,
+                                    new RadioConfigPage(playerRef, blockPos));
                         }
                         MediaRadioPlugin.getInstance().getMediaManager()
                                 .playSound(mediaInfo, playerRef, store)
@@ -601,7 +605,8 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
 
     private void handleSeekScrub(float seekPercent, Store<EntityStore> store) {
         var manager = MediaRadioPlugin.getInstance().getPlaybackManager();
-        PlaybackSession session = blockPos != null ? manager.getSession(blockPos) : manager.getSession(playerRef.getUuid());
+        PlaybackSession session = blockPos != null ? manager.getSession(blockPos)
+                : manager.getSession(playerRef.getUuid());
         if (session == null || session.isStopped()) {
             return;
         }
@@ -623,7 +628,8 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
 
         long previewMs = (long) (session.getTotalDurationMs() * (seekPercent / 100.0f));
         UICommandBuilder commandBuilder = new UICommandBuilder();
-        commandBuilder.set("#NowPlayingTime.Text", formatTime(previewMs) + " / " + formatTime(session.getTotalDurationMs()));
+        commandBuilder.set("#NowPlayingTime.Text",
+                formatTime(previewMs) + " / " + formatTime(session.getTotalDurationMs()));
         commandBuilder.set("#SeekSlider.Value", (int) seekPercent);
         UIEventBuilder eventBuilder = new UIEventBuilder();
         addEventBindings(eventBuilder);
@@ -634,7 +640,8 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
         }
         state.finalizeTask = HytaleServer.SCHEDULED_EXECUTOR.schedule(() -> {
             store.getExternalData().getWorld().execute(() -> {
-                PlaybackSession freshSession = blockPos != null ? manager.getSession(blockPos) : manager.getSession(playerId);
+                PlaybackSession freshSession = blockPos != null ? manager.getSession(blockPos)
+                        : manager.getSession(playerId);
                 if (freshSession != null && !freshSession.isStopped()) {
                     if (blockPos != null) {
                         manager.seek(blockPos, state.lastPercent / 100.0, store);

@@ -4,6 +4,9 @@ import java.util.concurrent.ScheduledFuture;
 import javax.annotation.Nullable;
 import com.hypixel.hytale.math.vector.Vector3i;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
+import com.hypixel.hytale.component.Ref;
+import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
+import com.hypixel.hytale.server.npc.entities.NPCEntity;
 
 /**
  * Represents the playback state for a single radio block.
@@ -22,6 +25,9 @@ public class PlaybackSession {
     private final int totalChunks;
     private final int chunkDurationMs;
     private final long totalDurationMs;
+
+    private Ref<EntityStore> markerEntity;
+    private NPCEntity npcEntity;
 
     private int currentChunk = 0;
     private int missingAssetRetries = 0;
@@ -214,6 +220,10 @@ public class PlaybackSession {
         return ++missingAssetRetries;
     }
 
+    public int getMissingAssetRetries() {
+        return missingAssetRetries;
+    }
+
     /**
      * Seek to a specific time in milliseconds
      */
@@ -333,5 +343,21 @@ public class PlaybackSession {
      */
     public String getCurrentChunkTrackId() {
         return getChunkTrackId(currentChunk);
+    }
+
+    public Ref<EntityStore> getMarkerEntity() {
+        return markerEntity;
+    }
+
+    public void setMarkerEntity(Ref<EntityStore> markerEntity) {
+        this.markerEntity = markerEntity;
+    }
+
+    public NPCEntity getNPCEntity() {
+        return npcEntity;
+    }
+
+    public void setNPCEntity(NPCEntity npcEntity) {
+        this.npcEntity = npcEntity;
     }
 }

@@ -12,6 +12,7 @@ import com.hypixel.hytale.server.core.asset.AssetModule;
 import com.hypixel.hytale.server.core.asset.common.CommonAssetModule;
 import com.hypixel.hytale.server.core.asset.common.CommonAssetRegistry;
 import com.hypixel.hytale.server.core.asset.common.asset.FileCommonAsset;
+import com.hypixel.hytale.server.core.asset.type.model.config.ModelAsset;
 import com.hypixel.hytale.server.core.asset.type.soundevent.config.SoundEvent;
 import dev.jacobwasbeast.MediaRadioPlugin;
 
@@ -35,6 +36,9 @@ import java.security.MessageDigest;
 import java.util.logging.Level;
 import it.unimi.dsi.fastutil.booleans.BooleanObjectPair;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
+import java.awt.image.BufferedImage;
+import javax.imageio.ImageIO;
+import java.io.ByteArrayOutputStream;
 
 public class MediaManager {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -53,6 +57,9 @@ public class MediaManager {
     private final Map<String, StoredSong> storedSongs = new ConcurrentHashMap<>();
     private final Map<String, CompletableFuture<MediaInfo>> inFlightRequests = new ConcurrentHashMap<>();
 
+    private final Path serverModelsPath;
+    private final Path serverRolesPath;
+
     public MediaManager(MediaRadioPlugin plugin) {
         this.plugin = plugin;
         Path baseDir = MediaRadioPlugin.resolveRuntimeBasePath();
@@ -64,6 +71,12 @@ public class MediaManager {
         this.commonAudioPath = runtimeAssetsPath.resolve("Common/Sounds/media_radio");
         // SoundEvent definitions: Server/Audio/SoundEvents/
         this.serverSoundEventsPath = runtimeAssetsPath.resolve("Server/Audio/SoundEvents");
+
+        // Models and Roles
+        // Models and Roles
+        this.serverModelsPath = runtimeAssetsPath.resolve("Common/Models/MediaRadio");
+        this.serverRolesPath = runtimeAssetsPath.resolve("Server/NPC/Roles");
+
         this.thumbnailPath = runtimeAssetsPath.resolve("Common/UI/Custom/Pages/MediaRadio/Thumbs");
     }
 
@@ -74,6 +87,13 @@ public class MediaManager {
             loadSongIndex();
             registerRuntimePack();
             logExternalToolStatus();
+
+            // Initialize static assets for markers
+            ensureStaticAssets();
+            registerStaticAssets();
+            ensureBaseAppearance();
+            ensureRole();
+
             plugin.getLogger().at(Level.INFO).log("MediaManager init completed successfully.");
         } catch (Exception e) {
             plugin.getLogger().at(Level.SEVERE).withCause(e).log("Failed to initialize MediaManager");
@@ -83,6 +103,8 @@ public class MediaManager {
     private void ensureDirectories() throws IOException {
         Files.createDirectories(commonAudioPath);
         Files.createDirectories(serverSoundEventsPath);
+        Files.createDirectories(serverModelsPath);
+        Files.createDirectories(serverRolesPath);
         Files.createDirectories(thumbnailPath);
         Files.createDirectories(storagePath);
         plugin.getLogger().at(Level.INFO).log("Ensured directories exist at: %s", runtimeAssetsPath);
@@ -91,6 +113,9 @@ public class MediaManager {
     private void cleanupRuntimeFolders() {
         deleteDirectory(commonAudioPath);
         deleteDirectory(serverSoundEventsPath);
+        deleteDirectory(runtimeAssetsPath.resolve("Common/Models/MediaRadio")); // Cleanup old path
+        deleteDirectory(serverModelsPath);
+        deleteDirectory(serverRolesPath);
     }
 
     private void deleteDirectory(Path dir) {
@@ -224,6 +249,7 @@ public class MediaManager {
         // Don't include extension in -o template - yt-dlp adds it automatically with
         // --audio-format
         Path outputPathBase = storagePath.resolve(trackId);
+        Path outputPathBaseOgg = storagePath.resolve(trackId + ".ogg");
         Path expectedOutputPath = storagePath.resolve(trackId + ".ogg");
 
         // Command: yt-dlp -x --audio-format vorbis --audio-quality 0 -o "trackId" "url"
@@ -558,6 +584,43 @@ public class MediaManager {
                     registerCommonSoundAssets(trackId, chunkCount);
                     createSoundEvents(trackId, chunkCount);
                     loadSoundEventAssets(trackId, chunkCount);
+
+                    // Create the Unified Model once
+                    createTrackModel(trackId, chunkCount);
+
+                    // Ensure appearances (Initial Batch)
+                    // With unified model, we just need to confirm the model is loaded (done in
+                    // createTrackModel)
+
+                    // Schedule background generation for the rest (SoundEvents still need partial
+                    // loading if we were lazier,
+                    // but we generated all SoundEvents above.
+                    // Wait, splitAudio generates files, createSoundEvents generates ALL jsons.
+                    // Implementation plan said: "splitAudio and createSoundEvents continue to run
+                    // in background"
+                    // but currently they run synchronously in `ensureRuntimeAssets` for the WHOLE
+                    // track if it's new.
+                    // The "Refactor for Buffered Streaming" task made them background?
+                    // Ah, I see `startBackgroundAssetGeneration` was calling
+                    // `createChunkAppearance`.
+                    // The splitting seems to happen all at once in `splitAudio` currently?
+                    // Wait, looking at lines 582: chunkCount = splitAudio(...)
+                    // This seems to process everything.
+                    // Let's look at `splitAudio` again. It splits the whole file.
+                    // So `chunkCount` is the TOTAL.
+
+                    // The previous code had:
+                    // int initialBatch = Math.min(chunkCount, 10);
+                    // loop createChunkAppearance...
+                    // if chunkCount > initialBatch -> startBackgroundAssetGeneration
+
+                    // Since we now generate ONE model with ALL keys, we just call createTrackModel
+                    // once.
+                    // We don't need background generation for APPEARANCES anymore.
+                    // We MIGHT need it if we were doing lazy SoundEvent generation, but
+                    // `createSoundEvents`
+                    // iterates 0 to chunkCount. So that's also eager.
+
                 }
             } catch (Exception e) {
                 plugin.getLogger().at(Level.WARNING).withCause(e)
@@ -565,16 +628,353 @@ public class MediaManager {
                 return 0;
             }
         } else {
-            String firstChunkId = String.format("%s_Chunk_%03d", trackId, 0);
-            if (SoundEvent.getAssetMap().getIndex(firstChunkId) < 0) {
+            // Check if model exists
+            String appearanceId = "medradio_marker_" + trackId;
+            if (ModelAsset.getAssetMap().getAsset(appearanceId) == null) {
                 registerCommonSoundAssets(trackId, chunkCount);
-                if (!Files.exists(serverSoundEventsPath.resolve(firstChunkId + ".json"))) {
+                // Ensure SoundEvents
+                if (!Files.exists(serverSoundEventsPath.resolve(String.format("%s_Chunk_%03d.json", trackId, 0)))) {
                     createSoundEvents(trackId, chunkCount);
                 }
                 loadSoundEventAssets(trackId, chunkCount);
+
+                createTrackModel(trackId, chunkCount);
             }
         }
         return chunkCount;
+    }
+
+    // Background generation is no longer needed for appearances since we generate
+    // the single model upfront.
+    // If we were splitting audio in background, that would be different, but
+    // splitAudio does it all.
+    // We'll keep the method empty or remove usage to satisfy the "remove loop"
+    // requirement.
+    private void startBackgroundAssetGeneration(String trackId, int startChunk, int totalChunks) {
+        // No-op for now as model contains all states
+    }
+
+    public void createTrackModel(String trackId, int estimatedChunks) {
+        String appearanceId = "medradio_marker_" + trackId;
+        Path jsonPath = serverModelsPath.resolve(appearanceId + ".json");
+
+        // If it exists, we might want to update it if the chunk count has increased
+        // significantly,
+        // but for now, let's assume estimatedChunks covers it (or we can just overwrite
+        // if needed).
+        // To be safe and support growing files, we can just overwrite it if it's the
+        // initial generation,
+        // or check if we need to expand. For simplicity, we overwrite if it's the first
+        // batch,
+        // but for "estimatedChunks" we should probably pass the TOTAL expected chunks.
+
+        Map<String, Object> animationSets = new HashMap<>();
+
+        // Generate animation entries for ALL estimated chunks
+        // Keys: PlayChunk0, PlayChunk1, ...
+        for (int i = 0; i < estimatedChunks; i++) {
+            String chunkTrackId = String.format("%s_Chunk_%03d", trackId, i);
+
+            Map<String, Object> animation = new HashMap<>();
+            animation.put("Animation", "NPC/MediaRadio/Animations/radio_play.blockyanim");
+            animation.put("Looping", false);
+            animation.put("SoundEventId", chunkTrackId);
+
+            Map<String, Object> animationSet = new HashMap<>();
+            animationSet.put("Animations", Collections.singletonList(animation));
+
+            animationSets.put("PlayChunk" + i, animationSet);
+        }
+
+        Map<String, Object> modelAsset = new HashMap<>();
+        modelAsset.put("Model", "NPC/MISC/Empty.blockymodel");
+        modelAsset.put("EyeHeight", 0.0);
+        modelAsset.put("HitBox", Map.of(
+                "Max", Map.of("X", 0.1, "Y", 0.1, "Z", 0.1),
+                "Min", Map.of("X", -0.1, "Y", 0.0, "Z", -0.1)));
+        modelAsset.put("AnimationSets", animationSets);
+
+        // Ensure directory exists
+        try {
+            Files.createDirectories(jsonPath.getParent());
+        } catch (IOException ignored) {
+        }
+
+        try (Writer writer = Files.newBufferedWriter(jsonPath)) {
+            GSON.toJson(modelAsset, writer);
+        } catch (IOException e) {
+            plugin.getLogger().at(Level.SEVERE).withCause(e).log("Failed to write ModelAsset for %s", appearanceId);
+            return;
+        }
+
+        // touch asset
+        try {
+            Files.setLastModifiedTime(jsonPath,
+                    java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis()));
+        } catch (IOException e) {
+        }
+
+        notifyAssetChange(jsonPath);
+        registerCommonModelAsset(appearanceId, jsonPath);
+        notifyAssetChange(serverModelsPath);
+        loadModelAsset(appearanceId);
+
+        plugin.getLogger().at(Level.INFO).log("Created unified Track Model for %s with %d animation states", trackId,
+                estimatedChunks);
+    }
+
+    private void registerCommonModelAsset(String appearanceId, Path existingPath) {
+        CommonAssetModule commonAssetModule = CommonAssetModule.get();
+        if (commonAssetModule == null)
+            return;
+
+        String assetName = "NPC/Models/" + appearanceId + ".json";
+        if (CommonAssetRegistry.hasCommonAsset(assetName))
+            return;
+
+        try {
+            byte[] bytes = Files.readAllBytes(existingPath);
+            commonAssetModule.addCommonAsset(RUNTIME_PACK_NAME, new FileCommonAsset(existingPath, assetName, bytes));
+        } catch (IOException e) {
+            plugin.getLogger().at(Level.WARNING).withCause(e).log("Failed to register common model asset %s",
+                    assetName);
+        }
+    }
+
+    private void loadModelAsset(String appearanceId) {
+        Path jsonPath = serverModelsPath.resolve(appearanceId + ".json");
+        if (!Files.exists(jsonPath))
+            return;
+
+        try {
+            ModelAsset.getAssetStore().loadAssetsFromPaths(RUNTIME_PACK_NAME, Collections.singletonList(jsonPath),
+                    AssetUpdateQuery.DEFAULT, true);
+        } catch (Exception e) {
+            plugin.getLogger().at(Level.WARNING).withCause(e).log("Failed to load ModelAsset %s", appearanceId);
+        }
+    }
+
+    private void registerStaticAssets() {
+        Path animPath = runtimeAssetsPath.resolve("Common/NPC/MediaRadio/Animations/radio_play.blockyanim");
+        if (!Files.exists(animPath))
+            return;
+
+        CommonAssetModule commonAssetModule = CommonAssetModule.get();
+        if (commonAssetModule == null)
+            return;
+
+        String assetName = "NPC/MediaRadio/Animations/radio_play.blockyanim";
+        try {
+            byte[] bytes = Files.readAllBytes(animPath);
+            commonAssetModule.addCommonAsset(RUNTIME_PACK_NAME, new FileCommonAsset(animPath, assetName, bytes));
+            plugin.getLogger().atInfo().log("Successfully registered animation asset: " + assetName);
+        } catch (IOException e) {
+            plugin.getLogger().at(Level.WARNING).withCause(e).log("Failed to register radio_play animation");
+        }
+
+        // Register Empty.blockymodel
+        Path modelPath = runtimeAssetsPath.resolve("Common/NPC/MISC/Empty.blockymodel");
+        if (Files.exists(modelPath)) {
+            String modelAssetName = "NPC/MISC/Empty.blockymodel";
+            try {
+                byte[] bytes = Files.readAllBytes(modelPath);
+                commonAssetModule.addCommonAsset(RUNTIME_PACK_NAME,
+                        new FileCommonAsset(modelPath, modelAssetName, bytes));
+            } catch (IOException e) {
+                plugin.getLogger().at(Level.WARNING).withCause(e).log("Failed to register Empty.blockymodel");
+            }
+        }
+
+        // Register Empty.png
+        Path texturePath = runtimeAssetsPath.resolve("Common/NPC/MISC/Empty.png");
+        if (Files.exists(texturePath)) {
+            String textureAssetName = "NPC/MISC/Empty.png";
+            try {
+                byte[] bytes = Files.readAllBytes(texturePath);
+                commonAssetModule.addCommonAsset(RUNTIME_PACK_NAME,
+                        new FileCommonAsset(texturePath, textureAssetName, bytes));
+            } catch (IOException e) {
+                plugin.getLogger().at(Level.WARNING).withCause(e).log("Failed to register Empty.png");
+            }
+        }
+    }
+
+    private void ensureStaticAssets() {
+        // Ensure radio_play.blockyanim
+        Path animPath = runtimeAssetsPath.resolve("Common/NPC/MediaRadio/Animations/radio_play.blockyanim");
+        // Force regeneration to update duration
+        try {
+            Files.createDirectories(animPath.getParent());
+            Map<String, Object> anim = new HashMap<>();
+            anim.put("formatVersion", 1);
+            anim.put("duration", 1); // 1 second
+            anim.put("nodeAnimations", new HashMap<>()); // Empty, just drives sounds
+            try (Writer writer = Files.newBufferedWriter(animPath)) {
+                GSON.toJson(anim, writer);
+            }
+        } catch (IOException e) {
+            plugin.getLogger().at(Level.SEVERE).withCause(e).log("Failed to create radio_play.blockyanim");
+        }
+
+        // Ensure Empty.blockymodel
+        Path modelPath = runtimeAssetsPath.resolve("Common/NPC/MISC/Empty.blockymodel");
+        boolean needsRegen = !Files.exists(modelPath);
+        if (!needsRegen) {
+            try {
+                String content = Files.readString(modelPath);
+                if (!content.contains("\"type\": \"box\"")) { // Force regen if using old "quad" or invalid
+                    plugin.getLogger().at(Level.INFO).log("Regenerating legacy/invalid Empty.blockymodel");
+                    needsRegen = true;
+                }
+            } catch (IOException e) {
+                needsRegen = true;
+            }
+        }
+
+        if (needsRegen) {
+            generateEmptyModel(modelPath);
+        }
+
+        // Ensure Empty.png (32x32 required by Hytale)
+        Path texturePath = runtimeAssetsPath.resolve("Common/NPC/MISC/Empty.png");
+        if (!Files.exists(texturePath)) {
+            generateEmptyTexture(texturePath);
+        } else {
+            try {
+                BufferedImage img = ImageIO.read(texturePath.toFile());
+                if (img == null || img.getWidth() < 32 || img.getHeight() < 32) {
+                    plugin.getLogger().at(Level.INFO).log("Regenerating Empty.png (invalid dimensions)");
+                    generateEmptyTexture(texturePath);
+                }
+            } catch (Exception e) {
+                generateEmptyTexture(texturePath);
+            }
+        }
+    }
+
+    private void generateEmptyTexture(Path path) {
+        try {
+            BufferedImage image = new BufferedImage(32, 32, BufferedImage.TYPE_INT_ARGB);
+            // Default is transparent
+            Files.createDirectories(path.getParent());
+            ImageIO.write(image, "png", path.toFile());
+            plugin.getLogger().at(Level.INFO).log("Generated 32x32 Empty.png at %s", path);
+        } catch (IOException e) {
+            plugin.getLogger().at(Level.WARNING).withCause(e).log("Failed to generate Empty.png");
+        }
+    }
+
+    private void generateEmptyModel(Path path) {
+        // Minimal valid blocky model
+        // A single invisible node - trying a small box with valid transparency
+        Map<String, Object> node = new HashMap<>();
+        node.put("id", "0");
+        node.put("name", "root");
+        node.put("position", Map.of("x", 0.0, "y", 0.0, "z", 0.0));
+        node.put("orientation", Map.of("x", 0.0, "y", 0.0, "z", 0.0, "w", 1.0));
+
+        Map<String, Object> shape = new HashMap<>();
+        shape.put("type", "box"); // Box is standard
+        shape.put("visible", true); // We'll rely on transparent texture
+        // 1 unit size
+        shape.put("settings", Map.of("size", Map.of("x", 1.0, "y", 1.0, "z", 1.0)));
+        // UV mapping - basic auto
+        shape.put("unwrapMode", "auto");
+        // Texture layout - required for parser?
+        Map<String, Object> layout = new HashMap<>();
+        // All faces
+        for (String face : new String[] { "north", "south", "east", "west", "up", "down" }) {
+            layout.put(face, Map.of(
+                    "offset", Map.of("x", 0, "y", 0),
+                    "mirror", Map.of("x", false, "y", false),
+                    "angle", 0));
+        }
+        shape.put("textureLayout", layout);
+
+        node.put("shape", shape);
+        node.put("children", Collections.emptyList());
+
+        Map<String, Object> model = new HashMap<>();
+        model.put("nodes", Collections.singletonList(node));
+        model.put("lod", "auto");
+
+        try {
+            Files.createDirectories(path.getParent());
+            try (Writer writer = Files.newBufferedWriter(path)) {
+                GSON.toJson(model, writer);
+            }
+            plugin.getLogger().at(Level.INFO).log("Generated valid Empty.blockymodel at %s", path);
+        } catch (IOException e) {
+            plugin.getLogger().at(Level.WARNING).withCause(e).log("Failed to generate Empty.blockymodel");
+        }
+    }
+
+    private void ensureBaseAppearance() {
+        String baseId = "medradio_marker";
+        Path jsonPath = serverModelsPath.resolve(baseId + ".json");
+
+        if (Files.exists(jsonPath)) {
+            registerCommonModelAsset(baseId, jsonPath);
+            loadModelAsset(baseId);
+            return;
+        }
+
+        Map<String, Object> modelAsset = new HashMap<>();
+        modelAsset.put("Model", "NPC/MISC/Empty.blockymodel");
+        modelAsset.put("EyeHeight", 0.0);
+        modelAsset.put("HitBox", Map.of(
+                "Max", Map.of("X", 0.1, "Y", 0.1, "Z", 0.1),
+                "Min", Map.of("X", -0.1, "Y", 0.0, "Z", -0.1)));
+
+        try (Writer writer = Files.newBufferedWriter(jsonPath)) {
+            GSON.toJson(modelAsset, writer);
+        } catch (IOException e) {
+            plugin.getLogger().at(Level.SEVERE).withCause(e).log("Failed to write base ModelAsset for %s", baseId);
+            return;
+        }
+
+        notifyAssetChange(jsonPath);
+        registerCommonModelAsset(baseId, jsonPath);
+        loadModelAsset(baseId);
+    }
+
+    private void ensureRole() {
+        String roleName = "audio_marker";
+        Path jsonPath = serverRolesPath.resolve("audio_marker.json");
+        if (Files.exists(jsonPath)) {
+            // Register server asset if it exists
+            return;
+        }
+
+        Map<String, Object> role = new HashMap<>();
+        role.put("Type", "Generic");
+        role.put("Appearance", "medradio_marker");
+
+        Map<String, Object> movement = new HashMap<>();
+        movement.put("Type", "Walk");
+        role.put("MotionControllerList", Collections.singletonList(movement));
+
+        Map<String, Object> maxHealth = new HashMap<>();
+        maxHealth.put("Compute", "MaxHealth");
+        role.put("MaxHealth", maxHealth);
+
+        Map<String, Object> paramVal = new HashMap<>();
+        paramVal.put("Value", 1);
+        paramVal.put("Description", "Minimal health for invisible audio marker");
+
+        Map<String, Object> params = new HashMap<>();
+        params.put("MaxHealth", paramVal);
+        role.put("Parameters", params);
+
+        role.put("Instructions", Collections.singletonList(new HashMap<>()));
+        role.put("NameTranslationKey", "server.npcRoles.audio_marker.name");
+
+        try (Writer writer = Files.newBufferedWriter(jsonPath)) {
+            GSON.toJson(role, writer);
+        } catch (IOException e) {
+            plugin.getLogger().at(Level.SEVERE).withCause(e).log("Failed to write Role for %s", roleName);
+            return;
+        }
     }
 
     public String getTrackIdForUrl(String url) {

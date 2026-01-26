@@ -74,7 +74,8 @@ public class MediaRadioPlugin extends JavaPlugin {
                 com.hypixel.hytale.server.core.event.events.player.PlayerDisconnectEvent.class,
                 event -> {
                     if (playbackManager != null) {
-                        playbackManager.stopForPlayer(event.getPlayerRef().getUuid());
+                        var store = event.getPlayerRef().getReference().getStore();
+                        playbackManager.stopForPlayer(event.getPlayerRef().getUuid(), store);
                     }
                 });
         this.getEventRegistry().registerGlobal(
@@ -86,8 +87,8 @@ public class MediaRadioPlugin extends JavaPlugin {
                     if (!(event.getEntity() instanceof com.hypixel.hytale.server.core.entity.entities.Player)) {
                         return;
                     }
-                    com.hypixel.hytale.server.core.entity.entities.Player player =
-                            (com.hypixel.hytale.server.core.entity.entities.Player) event.getEntity();
+                    com.hypixel.hytale.server.core.entity.entities.Player player = (com.hypixel.hytale.server.core.entity.entities.Player) event
+                            .getEntity();
                     var ref = player.getReference();
                     if (ref == null || !ref.isValid()) {
                         return;
