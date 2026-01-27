@@ -45,6 +45,7 @@ public class MediaManager {
     private static final String RUNTIME_PACK_NAME = "MediaRadioRuntime";
     private static final String RUNTIME_ASSETS_DIR = "media_radio_assets";
     private static final String STORAGE_DIR = "songs";
+    private static final int CURRENT_NORMALIZATION_VERSION = 1;
 
     private final MediaRadioPlugin plugin;
     private final Path runtimeAssetsPath;
@@ -197,7 +198,7 @@ public class MediaManager {
                 StoredSong stored = storedSongs.get(trackId);
                 if (stored == null) {
                     storedSongs.put(trackId, new StoredSong(trackId, normalizedUrl, metadata.title, metadata.artist,
-                            metadata.duration));
+                            metadata.duration, CURRENT_NORMALIZATION_VERSION));
                     saveSongIndex();
                 }
                 String thumbnailAssetPath = ensureThumbnail(normalizedUrl, trackId);
@@ -324,6 +325,7 @@ public class MediaManager {
         ProcessBuilder pb = new ProcessBuilder(
                 ffmpegCommand,
                 "-i", inputFile.toString(),
+                "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
                 "-map", "0:a:0",
                 "-f", "segment",
                 "-segment_time", String.valueOf(segmentDuration),
@@ -407,11 +409,8 @@ public class MediaManager {
             } catch (IOException e) {
                 plugin.getLogger().at(Level.SEVERE).withCause(e).log("Failed to write SoundEvent for chunk %d", i);
             }
-            touchSoundEvent(jsonPath);
-            notifyAssetChange(jsonPath);
         }
-        touchSoundEventDir();
-        notifyAssetChange(serverSoundEventsPath);
+        plugin.getLogger().at(Level.INFO).log("Created %d SoundEvent configs for %s", chunkCount, trackId);
         plugin.getLogger().at(Level.INFO).log("Created %d SoundEvent configs for %s", chunkCount, trackId);
     }
 
@@ -467,29 +466,6 @@ public class MediaManager {
         }
     }
 
-    private void touchSoundEvent(Path jsonPath) {
-        try {
-            Files.setLastModifiedTime(jsonPath,
-                    java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis()));
-        } catch (IOException ignored) {
-        }
-    }
-
-    private void touchSoundEventDir() {
-        try {
-            Files.setLastModifiedTime(serverSoundEventsPath,
-                    java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis()));
-        } catch (IOException ignored) {
-        }
-    }
-
-    private void notifyAssetChange(Path path) {
-        var assetMonitor = AssetModule.get().getAssetMonitor();
-        if (assetMonitor != null) {
-            assetMonitor.markChanged(path);
-        }
-    }
-
     public CompletableFuture<Void> playSound(MediaInfo mediaInfo, PlayerRef playerRef, Store<EntityStore> store) {
         if (playerRef == null) {
             return CompletableFuture.completedFuture(null);
@@ -503,7 +479,8 @@ public class MediaManager {
             }
             store.getExternalData().getWorld().execute(() -> {
                 MediaInfo updated = withChunkCount(mediaInfo, totalChunks);
-                plugin.getPlaybackManager().playForPlayer(updated, playerRef, totalChunks, 750, store);
+                plugin.getPlaybackManager().playForPlayer(updated, playerRef, totalChunks,
+                        plugin.getConfig().getChunkDurationMs(), store);
                 result.complete(null);
             });
         }).exceptionally(ex -> {
@@ -564,6 +541,17 @@ public class MediaManager {
             return 0;
         }
         String trackId = mediaInfo.trackId;
+
+        // Check for outdated version and triggers re-normalization
+        StoredSong stored = storedSongs.get(trackId);
+        if (stored != null && stored.version < CURRENT_NORMALIZATION_VERSION) {
+            plugin.getLogger().at(Level.INFO).log("Normalizing existing track: %s (v%d -> v%d)",
+                    trackId, stored.version, CURRENT_NORMALIZATION_VERSION);
+            cleanupRuntimeAssets(trackId);
+            stored.version = CURRENT_NORMALIZATION_VERSION;
+            saveSongIndex();
+        }
+
         Path storedAudio = storagePath.resolve(trackId + ".ogg");
         if (!Files.exists(storedAudio)) {
             try {
@@ -707,16 +695,7 @@ public class MediaManager {
             return;
         }
 
-        // touch asset
-        try {
-            Files.setLastModifiedTime(jsonPath,
-                    java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis()));
-        } catch (IOException e) {
-        }
-
-        notifyAssetChange(jsonPath);
         registerCommonModelAsset(appearanceId, jsonPath);
-        notifyAssetChange(serverModelsPath);
         loadModelAsset(appearanceId);
 
         plugin.getLogger().at(Level.INFO).log("Created unified Track Model for %s with %d animation states", trackId,
@@ -807,42 +786,41 @@ public class MediaManager {
             Files.createDirectories(animPath.getParent());
             Map<String, Object> anim = new HashMap<>();
             anim.put("formatVersion", 1);
-            anim.put("duration", 1); // 1 second
             anim.put("nodeAnimations", new HashMap<>()); // Empty, just drives sounds
             try (Writer writer = Files.newBufferedWriter(animPath)) {
                 GSON.toJson(anim, writer);
             }
-        } catch (IOException e) {
-            plugin.getLogger().at(Level.SEVERE).withCause(e).log("Failed to create radio_play.blockyanim");
-        }
 
+            plugin.getLogger().at(Level.INFO).log("Generated radio_play.blockyanim at %s", animPath);
+        } catch (IOException e) {
+            plugin.getLogger().at(Level.WARNING).withCause(e).log("Failed to ensure radio_play.blockyanim");
+        }
         // Ensure Empty.blockymodel
         Path modelPath = runtimeAssetsPath.resolve("Common/NPC/MISC/Empty.blockymodel");
-        boolean needsRegen = !Files.exists(modelPath);
-        if (!needsRegen) {
+        if (!Files.exists(modelPath)) {
+            generateEmptyModel(modelPath);
+        } else {
+            // Check if it's our own empty model or something else
             try {
                 String content = Files.readString(modelPath);
-                if (!content.contains("\"type\": \"box\"")) { // Force regen if using old "quad" or invalid
-                    plugin.getLogger().at(Level.INFO).log("Regenerating legacy/invalid Empty.blockymodel");
-                    needsRegen = true;
+                if (!content.contains("NPC/MISC/Empty.blockymodel") && !content.contains("Empty.blockymodel")) {
+                    plugin.getLogger().at(Level.INFO)
+                            .log("Regenerating Empty.blockymodel (found potentially invalid content)");
+                    generateEmptyModel(modelPath);
                 }
             } catch (IOException e) {
-                needsRegen = true;
+                generateEmptyModel(modelPath);
             }
         }
 
-        if (needsRegen) {
-            generateEmptyModel(modelPath);
-        }
-
-        // Ensure Empty.png (32x32 required by Hytale)
+        // Ensure Empty.png (32x32 required by some versions of the model parser)
         Path texturePath = runtimeAssetsPath.resolve("Common/NPC/MISC/Empty.png");
         if (!Files.exists(texturePath)) {
             generateEmptyTexture(texturePath);
         } else {
             try {
                 BufferedImage img = ImageIO.read(texturePath.toFile());
-                if (img == null || img.getWidth() < 32 || img.getHeight() < 32) {
+                if (img == null || img.getWidth() != 32 || img.getHeight() != 32) {
                     plugin.getLogger().at(Level.INFO).log("Regenerating Empty.png (invalid dimensions)");
                     generateEmptyTexture(texturePath);
                 }
@@ -933,7 +911,6 @@ public class MediaManager {
             return;
         }
 
-        notifyAssetChange(jsonPath);
         registerCommonModelAsset(baseId, jsonPath);
         loadModelAsset(baseId);
     }
@@ -1204,9 +1181,6 @@ public class MediaManager {
                 Files.move(downloaded, pngPath);
             }
 
-            touchThumbnail(pngPath);
-            notifyAssetChange(pngPath);
-            notifyAssetChange(thumbnailPath);
             registerThumbnailAsset(pngPath, getThumbnailAssetPath(trackId));
             return getThumbnailAssetPath(trackId);
         } catch (Exception e) {
@@ -1222,18 +1196,6 @@ public class MediaManager {
             }
         }
         return null;
-    }
-
-    private void touchThumbnail(Path pngPath) {
-        try {
-            Files.setLastModifiedTime(pngPath, java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis()));
-        } catch (IOException ignored) {
-        }
-        try {
-            Files.setLastModifiedTime(thumbnailPath,
-                    java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis()));
-        } catch (IOException ignored) {
-        }
     }
 
     private void registerThumbnailAsset(Path pngPath, String assetPath) {
@@ -1496,16 +1458,18 @@ public class MediaManager {
         public String title;
         public String artist;
         public long duration;
+        public int version;
 
         public StoredSong() {
         }
 
-        public StoredSong(String trackId, String url, String title, String artist, long duration) {
+        public StoredSong(String trackId, String url, String title, String artist, long duration, int version) {
             this.trackId = trackId;
             this.url = url;
             this.title = title;
             this.artist = artist;
             this.duration = duration;
+            this.version = version;
         }
     }
 

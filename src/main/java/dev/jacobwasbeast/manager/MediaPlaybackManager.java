@@ -24,7 +24,6 @@ import java.util.logging.Level;
 import com.hypixel.hytale.protocol.AnimationSlot;
 import com.hypixel.hytale.server.npc.NPCPlugin;
 import com.hypixel.hytale.server.core.asset.type.model.config.Model;
-import com.hypixel.hytale.component.ComponentAccessor;
 import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.function.consumer.TriConsumer;
 import com.hypixel.hytale.component.Holder;
@@ -40,8 +39,6 @@ public class MediaPlaybackManager {
     private final Map<String, PlaybackSession> activeBlockSessions = new ConcurrentHashMap<>();
     private final Map<UUID, PlaybackSession> activePlayerSessions = new ConcurrentHashMap<>();
     private final Map<UUID, Boolean> loopPreferences = new ConcurrentHashMap<>();
-    private final Map<UUID, Float> volumePreferences = new ConcurrentHashMap<>();
-    private static final float MAX_VOLUME = 5.0f;
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
     private static final int MAX_MISSING_ASSET_RETRIES = 40;
     private static final long MISSING_ASSET_RETRY_DELAY_MS = 500;
@@ -53,8 +50,6 @@ public class MediaPlaybackManager {
     public MediaPlaybackManager(MediaRadioPlugin plugin) {
         this.plugin = plugin;
     }
-
-    // ... (rest of methods) ... can be removed now.
 
     /**
      * Get unique key for a block position
@@ -237,9 +232,6 @@ public class MediaPlaybackManager {
     /**
      * Stop playback at a block
      */
-    /**
-     * Stop playback at a block
-     */
     public void stop(Vector3i blockPos, Store<EntityStore> store) {
         String key = getBlockKey(blockPos);
         PlaybackSession session = activeBlockSessions.remove(key);
@@ -315,30 +307,6 @@ public class MediaPlaybackManager {
         if (session != null) {
             session.setLoopEnabled(enabled);
         }
-    }
-
-    public float getVolume(UUID playerId) {
-        if (playerId == null) {
-            return 1.0f;
-        }
-        return volumePreferences.getOrDefault(playerId, 1.0f);
-    }
-
-    public void setVolume(UUID playerId, float volume) {
-        if (playerId == null) {
-            return;
-        }
-        float clamped = Math.max(0.0f, Math.min(MAX_VOLUME, volume));
-        volumePreferences.put(playerId, clamped);
-    }
-
-    public float setVolumePercent(UUID playerId, float percent) {
-        if (playerId == null) {
-            return 100.0f;
-        }
-        float clampedPercent = Math.max(0.0f, Math.min(MAX_VOLUME * 100.0f, percent));
-        setVolume(playerId, clampedPercent / 100.0f);
-        return clampedPercent;
     }
 
     /**
@@ -500,28 +468,11 @@ public class MediaPlaybackManager {
             NPCEntity.setAppearance(marker, trackAppearanceId, (ComponentAccessor<EntityStore>) store);
         }
 
-        // Ensure appearance is correct (just in case, though it should be stable)
-        // We only set it if we think it might have changed, or just rely on it being
-        // set at spawn.
-        // Actually, for glitch-free playback, we should AVOID calling setAppearance
-        // repeatedly.
-        // But if we just spawned it, we set it.
-        // If it's an existing marker from a previous track (unlikely as we destroy on
-        // stop), we might need to update.
-        // But since we destroy on stop/change, we assume it's fresh for this track.
-
-        // HOWEVER, if we are switching tracks on the same marker (optimization?), we'd
-        // need to check.
-        // But `play` calls `stop` which destroys the marker. So marker is always fresh
-        // for the track.
-
         // Trigger Animation State for this chunk
         NPCEntity npc = session.getNPCEntity();
         if (npc != null) {
             String animationState = "PlayChunk" + chunkIndex;
             npc.playAnimation(marker, AnimationSlot.Action, animationState, (ComponentAccessor<EntityStore>) store);
-            // plugin.getLogger().at(Level.INFO).log("Animating chunk %d: %s", chunkIndex,
-            // animationState);
         } else {
             plugin.getLogger().at(Level.WARNING).log("NPCEntity missing for animation!");
         }

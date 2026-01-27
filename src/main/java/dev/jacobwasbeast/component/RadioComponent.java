@@ -34,9 +34,6 @@ public class RadioComponent implements Component<EntityStore> {
             .append(new KeyedCodec<>("CurrentTime", Codec.LONG), (component, v) -> component.currentTime = v,
                     component -> component.currentTime)
             .add()
-            .append(new KeyedCodec<>("Volume", Codec.LONG), (component, v) -> component.volume = v.intValue(),
-                    component -> (long) component.volume)
-            .add()
             .build();
 
     private String trackId = "";
@@ -46,7 +43,6 @@ public class RadioComponent implements Component<EntityStore> {
     private String thumbnailUrl = "";
     private long duration = 0;
     private long currentTime = 0;
-    private int volume = 100;
 
     // ComponentType must be registered in the plugin
     public static ComponentType<EntityStore, RadioComponent> COMPONENT_TYPE;
@@ -55,7 +51,7 @@ public class RadioComponent implements Component<EntityStore> {
     }
 
     public RadioComponent(String trackId, boolean isPlaying, String title, String artist, String thumbnailUrl,
-            long duration, long currentTime, int volume) {
+            long duration, long currentTime) {
         this.trackId = trackId;
         this.isPlaying = isPlaying;
         this.title = title;
@@ -63,7 +59,6 @@ public class RadioComponent implements Component<EntityStore> {
         this.thumbnailUrl = thumbnailUrl;
         this.duration = duration;
         this.currentTime = currentTime;
-        this.volume = volume;
     }
 
     public String getTrackId() {
@@ -122,17 +117,9 @@ public class RadioComponent implements Component<EntityStore> {
         this.currentTime = currentTime;
     }
 
-    public int getVolume() {
-        return volume;
-    }
-
-    public void setVolume(int volume) {
-        this.volume = volume;
-    }
-
     @Nonnull
     @Override
     public Component<EntityStore> clone() {
-        return new RadioComponent(trackId, isPlaying, title, artist, thumbnailUrl, duration, currentTime, volume);
+        return new RadioComponent(trackId, isPlaying, title, artist, thumbnailUrl, duration, currentTime);
     }
 }

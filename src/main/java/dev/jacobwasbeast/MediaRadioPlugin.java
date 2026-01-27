@@ -6,6 +6,7 @@ import com.hypixel.hytale.server.core.modules.interaction.interaction.config.ser
 import com.hypixel.hytale.server.core.Message;
 import dev.jacobwasbeast.manager.MediaManager;
 import dev.jacobwasbeast.ui.RadioConfigSupplier;
+import dev.jacobwasbeast.config.MediaRadioConfig;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -17,6 +18,7 @@ public class MediaRadioPlugin extends JavaPlugin {
     private MediaManager mediaManager;
     private dev.jacobwasbeast.manager.MediaLibrary mediaLibrary;
     private dev.jacobwasbeast.manager.MediaPlaybackManager playbackManager;
+    private dev.jacobwasbeast.config.MediaRadioConfig config;
 
     public MediaRadioPlugin(@Nonnull JavaPluginInit init) {
         super(init);
@@ -31,6 +33,12 @@ public class MediaRadioPlugin extends JavaPlugin {
         // This MUST happen in setup() before assets are loaded
         this.getCodecRegistry(OpenCustomUIInteraction.PAGE_CODEC)
                 .register("MediaRadio_Config", RadioConfigSupplier.class, RadioConfigSupplier.CODEC);
+
+        // Initialize Config
+        //this.config = dev.jacobwasbeast.config.MediaRadioConfig.load(resolveRuntimeBasePath());
+        this.config = new MediaRadioConfig();
+        this.getLogger().at(Level.INFO).log("MediaRadioConfig initialized. Chunk duration: %dms",
+                config.getChunkDurationMs());
 
         this.getLogger().at(Level.INFO).log("MediaRadioPlugin codecs registered.");
     }
@@ -161,6 +169,10 @@ public class MediaRadioPlugin extends JavaPlugin {
 
     public dev.jacobwasbeast.manager.MediaPlaybackManager getPlaybackManager() {
         return playbackManager;
+    }
+
+    public dev.jacobwasbeast.config.MediaRadioConfig getConfig() {
+        return config;
     }
 
     public static Path resolveRuntimeBasePath() {
