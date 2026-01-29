@@ -40,17 +40,20 @@ public class SetupRadioCommand extends AbstractPlayerCommand {
         Path ffmpegPath = manager.getExpectedFfmpegPath();
         if (!ytDlpAvailable && !ffmpegAvailable) {
             playerRef.sendMessage(Message.raw(
-                    "MediaRadio requires yt-dlp and ffmpeg. Place them here: " + ytDlpPath + " and " + ffmpegPath));
+                    "MediaRadio embedded tools missing: yt-dlp and ffmpeg not found for this platform. Expected cache paths: "
+                            + ytDlpPath + " and " + ffmpegPath));
             return;
         }
         if (!ytDlpAvailable) {
-            playerRef.sendMessage(Message.raw("MediaRadio requires yt-dlp. Place it here: " + ytDlpPath));
+            playerRef.sendMessage(
+                    Message.raw("MediaRadio embedded yt-dlp missing for this platform. Expected cache path: " + ytDlpPath));
         }
         if (!ffmpegAvailable) {
-            playerRef.sendMessage(Message.raw("MediaRadio requires ffmpeg. Place it here: " + ffmpegPath));
+            playerRef.sendMessage(
+                    Message.raw("MediaRadio embedded ffmpeg missing for this platform. Expected cache path: " + ffmpegPath));
         }
         if (ytDlpAvailable && ffmpegAvailable) {
-            playerRef.sendMessage(Message.raw("MediaRadio setup looks good: yt-dlp + ffmpeg detected."));
+            playerRef.sendMessage(Message.raw("MediaRadio setup looks good: embedded yt-dlp + ffmpeg detected."));
         }
     }
 }

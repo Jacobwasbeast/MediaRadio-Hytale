@@ -154,13 +154,13 @@ public class MediaRadioPlugin extends JavaPlugin {
                     if (playerRef != null) {
                         if (!ytDlpAvailable && !ffmpegAvailable) {
                             playerRef.sendMessage(Message.raw(
-                                    "MediaRadio requires yt-dlp and ffmpeg. Run /setup_radio for setup details."));
+                                    "MediaRadio embedded tools missing: yt-dlp and ffmpeg not found. Run /setup_radio for details."));
                         } else if (!ytDlpAvailable) {
                             playerRef.sendMessage(Message.raw(
-                                    "MediaRadio requires yt-dlp. Run /setup_radio for setup details."));
+                                    "MediaRadio embedded yt-dlp missing. Run /setup_radio for details."));
                         } else {
                             playerRef.sendMessage(Message.raw(
-                                    "MediaRadio requires ffmpeg. Run /setup_radio for setup details."));
+                                    "MediaRadio embedded ffmpeg missing. Run /setup_radio for details."));
                         }
                     }
                 });

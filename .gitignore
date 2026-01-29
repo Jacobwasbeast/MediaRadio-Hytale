@@ -48,3 +48,8 @@ Assets.zip
 /.idea
 /gradle
 /hytale-server
+
+# Embedded tool binaries
+/media-tools/src/main/resources/tools/**
+!/media-tools/src/main/resources/tools/**/.gitkeep
+!/media-tools/src/main/resources/tools/README.txt
