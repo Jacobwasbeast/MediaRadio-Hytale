@@ -73,11 +73,8 @@ public class MediaLibrary {
                 if (song == null || song.status == null) {
                     continue;
                 }
-                String status = song.status.toLowerCase();
-                if ("playing".equals(status) || "preparing...".equals(status) || "queued".equals(status)) {
-                    song.status = "Ready";
-                    changed = true;
-                }
+                song.status = "Ready";
+                changed = true;
             }
         }
         if (changed) {
