@@ -257,10 +257,26 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
         } else if ("Stop".equals(data.action)) {
             data.action = null; // Consume
             store.getExternalData().getWorld().execute(() -> {
+                PlaybackSession session = resolveSession();
                 if (blockPos != null) {
                     MediaRadioPlugin.getInstance().getPlaybackManager().stop(blockPos, store);
                 } else {
                     MediaRadioPlugin.getInstance().getPlaybackManager().stop(playerRef, store);
+                }
+                if (session != null && session.getUrl() != null && !session.getUrl().isEmpty()) {
+                    var library = MediaRadioPlugin.getInstance().getMediaLibrary();
+                    if (library != null) {
+                        library.upsertSongStatus(
+                                playerRef.getUuid().toString(),
+                                session.getUrl(),
+                                "Ready",
+                                null,
+                                null,
+                                null,
+                                0,
+                                null,
+                                null);
+                    }
                 }
                 player.sendMessage(Message.translation("Stopped playback."));
                 player.getPageManager().openCustomPage(ref, store, new RadioConfigPage(playerRef, blockPos));
@@ -383,14 +399,39 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
 
             MediaRadioPlugin.getInstance().getMediaManager().requestMedia(finalUrl).thenAccept(mediaInfo -> {
                 store.getExternalData().getWorld().execute(() -> {
+                    if (library != null) {
+                        library.upsertSongStatus(
+                                playerRef.getUuid().toString(),
+                                mediaInfo.url,
+                                "Preparing...",
+                                mediaInfo.title,
+                                mediaInfo.artist,
+                                mediaInfo.thumbnailUrl,
+                                mediaInfo.duration,
+                                mediaInfo.trackId,
+                                mediaInfo.thumbnailAssetPath);
+                    }
                     // Start playback
                     if (blockPos != null) {
                         MediaRadioPlugin.getInstance().getMediaManager()
                                 .playSoundAtBlock(mediaInfo, blockPos,
                                         MediaRadioPlugin.getInstance().getConfig().getChunkDurationMs(), store)
-                                .thenRun(() -> store.getExternalData().getWorld().execute(
-                                        () -> player.getPageManager().openCustomPage(ref, store,
-                                                new RadioConfigPage(playerRef, blockPos))))
+                                .thenRun(() -> store.getExternalData().getWorld().execute(() -> {
+                                    if (library != null) {
+                                        library.upsertSongStatus(
+                                                playerRef.getUuid().toString(),
+                                                mediaInfo.url,
+                                                "Playing",
+                                                mediaInfo.title,
+                                                mediaInfo.artist,
+                                                mediaInfo.thumbnailUrl,
+                                                mediaInfo.duration,
+                                                mediaInfo.trackId,
+                                                mediaInfo.thumbnailAssetPath);
+                                    }
+                                    player.getPageManager().openCustomPage(ref, store,
+                                            new RadioConfigPage(playerRef, blockPos));
+                                }))
                                 .exceptionally(ex -> {
                                     store.getExternalData().getWorld().execute(() -> {
                                         String reason = extractFailureReason(ex);
@@ -398,15 +439,40 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                                                 reason.isEmpty()
                                                         ? "Playback failed while preparing."
                                                         : "Playback failed: " + reason);
+                                        if (library != null) {
+                                            library.upsertSongStatus(
+                                                    playerRef.getUuid().toString(),
+                                                    mediaInfo.url,
+                                                    "Failed",
+                                                    mediaInfo.title,
+                                                    mediaInfo.artist,
+                                                    mediaInfo.thumbnailUrl,
+                                                    mediaInfo.duration,
+                                                    mediaInfo.trackId,
+                                                    mediaInfo.thumbnailAssetPath);
+                                        }
                                     });
                                     return null;
                                 });
                     } else {
                         MediaRadioPlugin.getInstance().getMediaManager()
                                 .playSound(mediaInfo, playerRef, store)
-                                .thenRun(() -> store.getExternalData().getWorld().execute(
-                                        () -> player.getPageManager().openCustomPage(ref, store,
-                                                new RadioConfigPage(playerRef, blockPos))))
+                                .thenRun(() -> store.getExternalData().getWorld().execute(() -> {
+                                    if (library != null) {
+                                        library.upsertSongStatus(
+                                                playerRef.getUuid().toString(),
+                                                mediaInfo.url,
+                                                "Playing",
+                                                mediaInfo.title,
+                                                mediaInfo.artist,
+                                                mediaInfo.thumbnailUrl,
+                                                mediaInfo.duration,
+                                                mediaInfo.trackId,
+                                                mediaInfo.thumbnailAssetPath);
+                                    }
+                                    player.getPageManager().openCustomPage(ref, store,
+                                            new RadioConfigPage(playerRef, blockPos));
+                                }))
                                 .exceptionally(ex -> {
                                     store.getExternalData().getWorld().execute(() -> {
                                         String reason = extractFailureReason(ex);
@@ -414,6 +480,18 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                                                 reason.isEmpty()
                                                         ? "Playback failed while preparing."
                                                         : "Playback failed: " + reason);
+                                        if (library != null) {
+                                            library.upsertSongStatus(
+                                                    playerRef.getUuid().toString(),
+                                                    mediaInfo.url,
+                                                    "Failed",
+                                                    mediaInfo.title,
+                                                    mediaInfo.artist,
+                                                    mediaInfo.thumbnailUrl,
+                                                    mediaInfo.duration,
+                                                    mediaInfo.trackId,
+                                                    mediaInfo.thumbnailAssetPath);
+                                        }
                                     });
                                     return null;
                                 });
@@ -426,6 +504,18 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                             reason.isEmpty()
                                     ? "Failed to load media."
                                     : "Failed to load media: " + reason);
+                    if (library != null) {
+                        library.upsertSongStatus(
+                                playerRef.getUuid().toString(),
+                                finalUrl,
+                                "Failed",
+                                null,
+                                null,
+                                null,
+                                0,
+                                null,
+                                null);
+                    }
                 });
                 return null;
             });

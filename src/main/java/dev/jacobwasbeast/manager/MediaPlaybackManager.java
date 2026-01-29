@@ -716,6 +716,26 @@ public class MediaPlaybackManager {
             return;
         }
 
+        if (session.isPlayerBound()) {
+            PlayerRef playerRef = session.getPlayerRef();
+            String url = session.getUrl();
+            if (playerRef != null && url != null && !url.isEmpty()) {
+                MediaLibrary library = plugin.getMediaLibrary();
+                if (library != null) {
+                    library.upsertSongStatus(
+                            playerRef.getUuid().toString(),
+                            url,
+                            "Ready",
+                            null,
+                            null,
+                            null,
+                            0,
+                            null,
+                            null);
+                }
+            }
+        }
+
         // Cleanup Marker
         com.hypixel.hytale.component.Ref<EntityStore> marker = session.getMarkerEntity();
         if (marker != null && marker.isValid()) {

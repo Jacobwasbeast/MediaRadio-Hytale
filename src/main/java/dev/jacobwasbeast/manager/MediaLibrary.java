@@ -138,9 +138,15 @@ public class MediaLibrary {
         if (playerId == null || playerId.isEmpty()) {
             return;
         }
+        String normalizedUrl = normalizeUrlForMatch(url);
         List<SavedSong> songs = songsByPlayer.computeIfAbsent(playerId, key -> new ArrayList<>());
         for (SavedSong s : songs) {
-            if (url.equals(s.url)) {
+            String songUrl = s.url;
+            if (songUrl == null || songUrl.isEmpty()) {
+                continue;
+            }
+            String normalizedSongUrl = normalizeUrlForMatch(songUrl);
+            if (url.equals(songUrl) || normalizedUrl.equals(normalizedSongUrl)) {
                 s.status = status;
                 if (title != null)
                     s.title = title;
@@ -154,6 +160,9 @@ public class MediaLibrary {
                     s.trackId = trackId;
                 if (thumbnailAssetPath != null)
                     s.thumbnailAssetPath = thumbnailAssetPath;
+                if (!normalizedUrl.equals(songUrl)) {
+                    s.url = normalizedUrl;
+                }
                 save();
                 return;
             }
@@ -161,13 +170,28 @@ public class MediaLibrary {
         songs.add(new SavedSong(
                 title != null ? title : "Unknown",
                 artist != null ? artist : "",
-                url,
+                normalizedUrl,
                 thumbnailUrl != null ? thumbnailUrl : "",
                 duration,
                 trackId,
                 thumbnailAssetPath,
                 status));
         save();
+    }
+
+    private String normalizeUrlForMatch(String url) {
+        if (url == null || url.isEmpty()) {
+            return "";
+        }
+        var mediaManager = plugin.getMediaManager();
+        if (mediaManager == null) {
+            return url;
+        }
+        try {
+            return mediaManager.normalizeUrl(url);
+        } catch (Exception e) {
+            return url;
+        }
     }
 
     public void removeSong(String playerId, String url) {
