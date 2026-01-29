@@ -214,11 +214,16 @@ public class MediaManager {
     }
 
     private MediaInfo resolveMetadata(String url, String trackId) throws Exception {
-        ProcessBuilder pb = new ProcessBuilder(
-                requireYtDlpCommand(),
-                "--dump-json",
-                "--no-playlist",
-                url);
+        java.util.List<String> command = new java.util.ArrayList<>();
+        command.add(requireYtDlpCommand());
+        command.add("--dump-json");
+        command.add("--no-playlist");
+        java.util.List<String> extraArgs = getYtDlpMetadataArgs();
+        if (!extraArgs.isEmpty()) {
+            command.addAll(extraArgs);
+        }
+        command.add(url);
+        ProcessBuilder pb = new ProcessBuilder(command);
 
         Process process;
         try {
@@ -277,6 +282,10 @@ public class MediaManager {
 
         command.add("-o");
         command.add(outputPathBase.toString());
+        java.util.List<String> extraArgs = getYtDlpArgs();
+        if (!extraArgs.isEmpty()) {
+            command.addAll(extraArgs);
+        }
         command.add(url);
 
         plugin.getLogger().at(Level.INFO).log("Executing yt-dlp command: %s", String.join(" ", command));
@@ -1202,12 +1211,18 @@ public class MediaManager {
         }
 
         try {
-            ProcessBuilder pb = new ProcessBuilder(
-                    requireYtDlpCommand(),
-                    "--write-thumbnail",
-                    "--skip-download",
-                    "-o", thumbnailPath.resolve(trackId).toString(),
-                    url);
+            java.util.List<String> command = new java.util.ArrayList<>();
+            command.add(requireYtDlpCommand());
+            command.add("--write-thumbnail");
+            command.add("--skip-download");
+            command.add("-o");
+            command.add(thumbnailPath.resolve(trackId).toString());
+            java.util.List<String> extraArgs = getYtDlpArgs();
+            if (!extraArgs.isEmpty()) {
+                command.addAll(extraArgs);
+            }
+            command.add(url);
+            ProcessBuilder pb = new ProcessBuilder(command);
             pb.redirectErrorStream(true);
             Process process;
             try {
@@ -1426,6 +1441,22 @@ public class MediaManager {
         } catch (Exception e) {
             return false;
         }
+    }
+
+    private java.util.List<String> getYtDlpArgs() {
+        if (plugin.getConfig() == null) {
+            return java.util.List.of();
+        }
+        java.util.List<String> args = plugin.getConfig().getYtDlpArgs();
+        return args != null ? args : java.util.List.of();
+    }
+
+    private java.util.List<String> getYtDlpMetadataArgs() {
+        if (plugin.getConfig() == null) {
+            return java.util.List.of();
+        }
+        java.util.List<String> args = plugin.getConfig().getYtDlpMetadataArgs();
+        return args != null ? args : java.util.List.of();
     }
 
     private String requireYtDlpCommand() {

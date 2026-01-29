@@ -43,8 +43,7 @@ public class MediaRadioPlugin extends JavaPlugin {
                 .register("MediaRadio_Config", RadioConfigSupplier.class, RadioConfigSupplier.CODEC);
 
         // Initialize Config
-        //this.config = dev.jacobwasbeast.config.MediaRadioConfig.load(resolveRuntimeBasePath());
-        this.config = new MediaRadioConfig();
+        this.config = MediaRadioConfig.load(resolveRuntimeBasePath());
         this.getLogger().at(Level.INFO).log("MediaRadioConfig initialized. Chunk duration: %dms",
                 config.getChunkDurationMs());
 
@@ -216,6 +215,7 @@ public class MediaRadioPlugin extends JavaPlugin {
     }
 
     public dev.jacobwasbeast.config.MediaRadioConfig getConfig() {
+        this.config = MediaRadioConfig.load(resolveRuntimeBasePath());
         return config;
     }
 
