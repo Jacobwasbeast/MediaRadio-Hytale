@@ -35,8 +35,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CompletableFuture;
 import java.security.MessageDigest;
 import java.util.logging.Level;
-import it.unimi.dsi.fastutil.booleans.BooleanObjectPair;
-import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import java.awt.image.BufferedImage;
 import javax.imageio.ImageIO;
 import java.io.ByteArrayOutputStream;
@@ -1281,13 +1279,12 @@ public class MediaManager {
         for (int i = 0; i < chunkCount; i++) {
             String fileName = String.format("%s_Chunk_%03d.ogg", trackId, i);
             Path chunkPath = commonAudioPath.resolve(fileName);
-            deleteCommonAsset("Sounds/media_radio/" + fileName, chunkPath);
+            deleteFile(chunkPath);
         }
 
         for (int i = 0; i < chunkCount; i++) {
             String chunkTrackId = String.format("%s_Chunk_%03d", trackId, i);
             Path jsonPath = serverSoundEventsPath.resolve(chunkTrackId + ".json");
-            removeSoundEventAsset(jsonPath);
             deleteFile(jsonPath);
         }
     }
@@ -1298,28 +1295,7 @@ public class MediaManager {
                 com.hypixel.hytale.server.core.HytaleServer.SCHEDULED_EXECUTOR);
     }
 
-    private void removeSoundEventAsset(Path jsonPath) {
-        if (!Files.exists(jsonPath)) {
-            return;
-        }
-        try {
-            SoundEvent.getAssetStore().removeAssetWithPath(jsonPath, AssetUpdateQuery.DEFAULT);
-        } catch (Exception e) {
-            plugin.getLogger().at(Level.WARNING).withCause(e).log("Failed to remove SoundEvent asset %s", jsonPath);
-        }
-    }
-
     private void deleteCommonAsset(String assetName, Path filePath) {
-        CommonAssetModule commonAssetModule = CommonAssetModule.get();
-        if (commonAssetModule != null && assetName != null && !assetName.isEmpty()) {
-            BooleanObjectPair<CommonAssetRegistry.PackAsset> removed = CommonAssetRegistry
-                    .removeCommonAssetByName(RUNTIME_PACK_NAME, assetName);
-            if (removed != null) {
-                ObjectArrayList<CommonAssetRegistry.PackAsset> removedAssets = new ObjectArrayList<>();
-                removedAssets.add(removed.second());
-                commonAssetModule.sendRemoveAssets(removedAssets, true);
-            }
-        }
         deleteFile(filePath);
     }
 
