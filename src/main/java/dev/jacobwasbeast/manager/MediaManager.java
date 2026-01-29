@@ -45,6 +45,8 @@ public class MediaManager {
     private static final String RUNTIME_ASSETS_DIR = "media_radio_assets";
     private static final String STORAGE_DIR = "songs";
     private static final int CURRENT_NORMALIZATION_VERSION = 1;
+    private static final int INITIAL_ASSET_BATCH = 5;
+    private static final int BACKGROUND_ASSET_BATCH = 25;
 
     private final MediaRadioPlugin plugin;
     private final Path runtimeAssetsPath;
@@ -387,17 +389,21 @@ public class MediaManager {
     }
 
     private void createSoundEvents(String trackId, int chunkCount, float volumeDb) {
-        // Create SoundEvent for each chunk
-        for (int i = 0; i < chunkCount; i++) {
+        createSoundEventsRange(trackId, 0, chunkCount, volumeDb);
+    }
+
+    private void createSoundEventsRange(String trackId, int startInclusive, int endExclusive, float volumeDb) {
+        if (endExclusive <= startInclusive) {
+            return;
+        }
+        for (int i = startInclusive; i < endExclusive; i++) {
             String chunkTrackId = String.format("%s_Chunk_%03d", trackId, i);
             Path jsonPath = serverSoundEventsPath.resolve(chunkTrackId + ".json");
-
-            // Map file path: Sounds/media_radio/trackId_Chunk_000.ogg
             String soundFilePath = String.format("Sounds/media_radio/%s_Chunk_%03d.ogg", trackId, i);
             writeSoundEventConfig(jsonPath, soundFilePath, volumeDb);
         }
-        plugin.getLogger().at(Level.INFO).log("Created %d SoundEvent configs for %s", chunkCount, trackId);
-        plugin.getLogger().at(Level.INFO).log("Created %d SoundEvent configs for %s", chunkCount, trackId);
+        plugin.getLogger().at(Level.INFO).log("Created SoundEvent configs for %s [%d..%d)", trackId,
+                startInclusive, endExclusive);
     }
 
     private void writeSoundEventConfig(Path jsonPath, String soundFilePath, float volumeDb) {
@@ -421,13 +427,17 @@ public class MediaManager {
     }
 
     private void registerCommonSoundAssets(String trackId, int chunkCount) {
+        registerCommonSoundAssetsRange(trackId, 0, chunkCount);
+    }
+
+    private void registerCommonSoundAssetsRange(String trackId, int startInclusive, int endExclusive) {
         CommonAssetModule commonAssetModule = CommonAssetModule.get();
         if (commonAssetModule == null) {
             plugin.getLogger().at(Level.WARNING).log("CommonAssetModule not available; cannot register sound assets.");
             return;
         }
 
-        for (int i = 0; i < chunkCount; i++) {
+        for (int i = startInclusive; i < endExclusive; i++) {
             String fileName = String.format("%s_Chunk_%03d.ogg", trackId, i);
             Path chunkPath = commonAudioPath.resolve(fileName);
             if (!Files.exists(chunkPath)) {
@@ -464,11 +474,16 @@ public class MediaManager {
     }
 
     private void loadSoundEventAssets(String trackId, int chunkCount) {
-        if (chunkCount <= 0) {
+        loadSoundEventAssetsRange(trackId, 0, chunkCount);
+    }
+
+    private void loadSoundEventAssetsRange(String trackId, int startInclusive, int endExclusive) {
+        if (endExclusive <= startInclusive) {
             return;
         }
-        java.util.List<Path> paths = new java.util.ArrayList<>(chunkCount);
-        for (int i = 0; i < chunkCount; i++) {
+        int size = endExclusive - startInclusive;
+        java.util.List<Path> paths = new java.util.ArrayList<>(size);
+        for (int i = startInclusive; i < endExclusive; i++) {
             String chunkTrackId = String.format("%s_Chunk_%03d", trackId, i);
             Path jsonPath = serverSoundEventsPath.resolve(chunkTrackId + ".json");
             if (Files.exists(jsonPath)) {
@@ -494,7 +509,7 @@ public class MediaManager {
             return CompletableFuture.completedFuture(null);
         }
         CompletableFuture<Void> result = new CompletableFuture<>();
-        prepareRuntimeAssetsAsync(mediaInfo, 750, VolumeUtil.percentToEventDb(VolumeUtil.DEFAULT_PERCENT))
+        prepareRuntimeAssetsAsync(mediaInfo, 750, VolumeUtil.percentToEventDb(VolumeUtil.DEFAULT_PERCENT), true)
                 .thenAccept(totalChunks -> {
             if (totalChunks <= 0) {
                 plugin.getLogger().at(Level.WARNING).log("No chunks available for %s", mediaInfo.trackId);
@@ -524,7 +539,7 @@ public class MediaManager {
         if (plugin.getPlaybackManager() != null) {
             volumeDb = plugin.getPlaybackManager().getBlockVolume(blockPos, store);
         }
-        prepareRuntimeAssetsAsync(mediaInfo, chunkDurationMs, volumeDb).thenAccept(totalChunks -> {
+        prepareRuntimeAssetsAsync(mediaInfo, chunkDurationMs, volumeDb, true).thenAccept(totalChunks -> {
             if (totalChunks <= 0) {
                 plugin.getLogger().at(Level.WARNING).log("No chunks available for %s", mediaInfo.trackId);
                 result.completeExceptionally(new RuntimeException("Failed to prepare media assets (0 chunks)"));
@@ -547,9 +562,9 @@ public class MediaManager {
     }
 
     private CompletableFuture<Integer> prepareRuntimeAssetsAsync(MediaInfo mediaInfo, int chunkDurationMs,
-            float volumeDb) {
+            float volumeDb, boolean waitForFullAssets) {
         return CompletableFuture.supplyAsync(
-                () -> ensureRuntimeAssets(mediaInfo, chunkDurationMs, volumeDb),
+                () -> ensureRuntimeAssets(mediaInfo, chunkDurationMs, volumeDb, waitForFullAssets),
                 com.hypixel.hytale.server.core.HytaleServer.SCHEDULED_EXECUTOR);
     }
 
@@ -565,7 +580,7 @@ public class MediaManager {
                 mediaInfo.thumbnailAssetPath);
     }
 
-    private int ensureRuntimeAssets(MediaInfo mediaInfo, int chunkDurationMs, float volumeDb) {
+    private int ensureRuntimeAssets(MediaInfo mediaInfo, int chunkDurationMs, float volumeDb, boolean waitForFullAssets) {
         if (mediaInfo == null) {
             return 0;
         }
@@ -598,12 +613,10 @@ public class MediaManager {
                 double seconds = Math.max(0.1, chunkDurationMs / 1000.0);
                 chunkCount = splitAudio(trackId, seconds);
                 if (chunkCount > 0) {
-                    registerCommonSoundAssets(trackId, chunkCount);
-                    createSoundEvents(trackId, chunkCount, volumeDb);
-                    loadSoundEventAssets(trackId, chunkCount);
-
-                    // Create the Unified Model once
-                    createTrackModel(trackId, chunkCount);
+                    int initialBatch = Math.min(chunkCount, INITIAL_ASSET_BATCH);
+                    registerCommonSoundAssetsRange(trackId, 0, initialBatch);
+                    createSoundEventsRange(trackId, 0, initialBatch, volumeDb);
+                    loadSoundEventAssetsRange(trackId, 0, initialBatch);
 
                     // Ensure appearances (Initial Batch)
                     // With unified model, we just need to confirm the model is loaded (done in
@@ -634,9 +647,17 @@ public class MediaManager {
                     // Since we now generate ONE model with ALL keys, we just call createTrackModel
                     // once.
                     // We don't need background generation for APPEARANCES anymore.
-                    // We MIGHT need it if we were doing lazy SoundEvent generation, but
-                    // `createSoundEvents`
-                    // iterates 0 to chunkCount. So that's also eager.
+                    if (chunkCount > initialBatch) {
+                        if (waitForFullAssets) {
+                            generateRemainingSoundEvents(trackId, initialBatch, chunkCount, volumeDb);
+                        } else {
+                            startBackgroundSoundEventGeneration(trackId, initialBatch, chunkCount, volumeDb);
+                        }
+                    }
+                    if (waitForFullAssets || chunkCount <= initialBatch) {
+                        // Create the Unified Model once all sound events exist.
+                        createTrackModel(trackId, chunkCount);
+                    }
 
                 }
             } catch (Exception e) {
@@ -648,14 +669,23 @@ public class MediaManager {
             // Check if model exists
             String appearanceId = "medradio_marker_" + trackId;
             if (ModelAsset.getAssetMap().getAsset(appearanceId) == null) {
-                registerCommonSoundAssets(trackId, chunkCount);
+                int initialBatch = Math.min(chunkCount, INITIAL_ASSET_BATCH);
+                registerCommonSoundAssetsRange(trackId, 0, initialBatch);
                 // Ensure SoundEvents
                 if (!Files.exists(serverSoundEventsPath.resolve(String.format("%s_Chunk_%03d.json", trackId, 0)))) {
-                    createSoundEvents(trackId, chunkCount);
+                    createSoundEventsRange(trackId, 0, initialBatch, volumeDb);
                 }
-                loadSoundEventAssets(trackId, chunkCount);
-
-                createTrackModel(trackId, chunkCount);
+                loadSoundEventAssetsRange(trackId, 0, initialBatch);
+                if (chunkCount > initialBatch) {
+                    if (waitForFullAssets) {
+                        generateRemainingSoundEvents(trackId, initialBatch, chunkCount, volumeDb);
+                    } else {
+                        startBackgroundSoundEventGeneration(trackId, initialBatch, chunkCount, volumeDb);
+                    }
+                }
+                if (waitForFullAssets || chunkCount <= initialBatch) {
+                    createTrackModel(trackId, chunkCount);
+                }
             }
         }
         return chunkCount;
@@ -669,6 +699,24 @@ public class MediaManager {
     // requirement.
     private void startBackgroundAssetGeneration(String trackId, int startChunk, int totalChunks) {
         // No-op for now as model contains all states
+    }
+
+    private void generateRemainingSoundEvents(String trackId, int startChunk, int totalChunks, float volumeDb) {
+        int current = startChunk;
+        while (current < totalChunks) {
+            int end = Math.min(totalChunks, current + BACKGROUND_ASSET_BATCH);
+            registerCommonSoundAssetsRange(trackId, current, end);
+            createSoundEventsRange(trackId, current, end, volumeDb);
+            loadSoundEventAssetsRange(trackId, current, end);
+            current = end;
+        }
+    }
+
+    private CompletableFuture<Void> startBackgroundSoundEventGeneration(String trackId, int startChunk, int totalChunks,
+            float volumeDb) {
+        return CompletableFuture.runAsync(() -> {
+            generateRemainingSoundEvents(trackId, startChunk, totalChunks, volumeDb);
+        }, com.hypixel.hytale.server.core.HytaleServer.SCHEDULED_EXECUTOR);
     }
 
     public void createTrackModel(String trackId, int estimatedChunks) {
