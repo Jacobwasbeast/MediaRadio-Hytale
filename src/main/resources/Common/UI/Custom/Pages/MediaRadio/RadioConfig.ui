@@ -84,7 +84,7 @@ $C.@Container {
                         PlaceholderText: "100";
                     }
 
-                    Group { Anchor: (Width: 6); }
+                    Group { Anchor: (Width: 4); }
 
                     $C.@SmallSecondaryTextButton #VolumeDown {
                         Text: "-";
@@ -96,6 +96,19 @@ $C.@Container {
                     $C.@SmallSecondaryTextButton #VolumeUp {
                         Text: "+";
                         Anchor: (Width: 26, Height: 20);
+                    }
+                }
+
+                Group {
+                    LayoutMode: Left;
+                    Anchor: (Top: 6, Height: 14);
+
+                    Label #VolumeHint {
+                        Text: "Max 500%";
+                        Style: LabelStyle(
+                            TextColor: #6f8297,
+                            FontSize: 11
+                        );
                     }
                 }
             }
