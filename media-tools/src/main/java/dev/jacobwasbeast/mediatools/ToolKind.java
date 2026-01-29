@@ -35,8 +35,10 @@ public enum ToolKind {
             };
         }
         return switch (arch) {
-            case ARM64 -> new String[] { "ffmpeg_arm64.exe", "ffmpeg.exe" };
-            default -> new String[] { "ffmpeg.exe" };
+            case ARM64 -> new String[] { "ffmpeg/bin/ffmpeg.exe", "ffmpeg/ffmpeg/bin/ffmpeg.exe", "ffmpeg/ffmpeg.exe",
+                    "ffmpeg_arm64.exe", "ffmpeg.exe" };
+            default -> new String[] { "ffmpeg/bin/ffmpeg.exe", "ffmpeg/ffmpeg/bin/ffmpeg.exe", "ffmpeg/ffmpeg.exe",
+                    "ffmpeg.exe" };
         };
     }
 
@@ -45,9 +47,11 @@ public enum ToolKind {
             return new String[] { "yt-dlp_macos", "yt-dlp" };
         }
         if (arch == Arch.ARM64) {
-            return new String[] { "ffmpeg_macos_arm64", "ffmpeg_macos", "ffmpeg" };
+            return new String[] { "ffmpeg/ffmpeg", "ffmpeg/bin/ffmpeg", "ffmpeg/ffmpeg/bin/ffmpeg", "ffmpeg_macos_arm64",
+                    "ffmpeg_macos", "ffmpeg" };
         }
-        return new String[] { "ffmpeg_macos", "ffmpeg" };
+        return new String[] { "ffmpeg/ffmpeg", "ffmpeg/bin/ffmpeg", "ffmpeg/ffmpeg/bin/ffmpeg", "ffmpeg_macos",
+                "ffmpeg" };
     }
 
     private String[] linuxFilenames(Arch arch) {
@@ -60,9 +64,11 @@ public enum ToolKind {
         }
 
         return switch (arch) {
-            case ARM64 -> new String[] { "ffmpeg_linux_aarch64", "ffmpeg_linux", "ffmpeg" };
+            case ARM64 -> new String[] { "ffmpeg/ffmpeg", "ffmpeg/bin/ffmpeg", "ffmpeg/ffmpeg/bin/ffmpeg",
+                    "ffmpeg_linux_aarch64", "ffmpeg_linux", "ffmpeg" };
             case ARMV7L, ARM, X86 -> new String[] { };
-            default -> new String[] { "ffmpeg_linux", "ffmpeg" };
+            default -> new String[] { "ffmpeg/ffmpeg", "ffmpeg/bin/ffmpeg", "ffmpeg/ffmpeg/bin/ffmpeg", "ffmpeg_linux",
+                    "ffmpeg" };
         };
     }
 }

@@ -34,23 +34,28 @@ public class SetupRadioCommand extends AbstractPlayerCommand {
             playerRef.sendMessage(Message.raw("MediaRadio is not ready yet."));
             return;
         }
+        if (!manager.isToolProviderAvailable()) {
+            playerRef.sendMessage(Message.raw(
+                    "MediaRadio requires the media-tools mod. Install the matching media-tools jar for your OS/CPU."));
+            return;
+        }
         boolean ytDlpAvailable = manager.isYtDlpAvailable();
         boolean ffmpegAvailable = manager.isFfmpegAvailable();
         Path ytDlpPath = manager.getExpectedYtDlpPath();
         Path ffmpegPath = manager.getExpectedFfmpegPath();
         if (!ytDlpAvailable && !ffmpegAvailable) {
             playerRef.sendMessage(Message.raw(
-                    "MediaRadio embedded tools missing: yt-dlp and ffmpeg not found for this platform. Expected cache paths: "
+                    "MediaRadio embedded tools missing: " + manager.getToolStatusSummary() + " Expected cache paths: "
                             + ytDlpPath + " and " + ffmpegPath));
             return;
         }
         if (!ytDlpAvailable) {
             playerRef.sendMessage(
-                    Message.raw("MediaRadio embedded yt-dlp missing for this platform. Expected cache path: " + ytDlpPath));
+                    Message.raw("MediaRadio embedded yt-dlp missing. Expected cache path: " + ytDlpPath));
         }
         if (!ffmpegAvailable) {
             playerRef.sendMessage(
-                    Message.raw("MediaRadio embedded ffmpeg missing for this platform. Expected cache path: " + ffmpegPath));
+                    Message.raw("MediaRadio embedded ffmpeg missing. Expected cache path: " + ffmpegPath));
         }
         if (ytDlpAvailable && ffmpegAvailable) {
             playerRef.sendMessage(Message.raw("MediaRadio setup looks good: embedded yt-dlp + ffmpeg detected."));

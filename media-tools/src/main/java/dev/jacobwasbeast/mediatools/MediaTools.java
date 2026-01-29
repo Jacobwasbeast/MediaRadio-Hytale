@@ -5,11 +5,11 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
 import java.util.EnumMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.logging.Level;
-import java.util.logging.Logger;
 
 public final class MediaTools {
     private static final String RESOURCE_ROOT = "/tools";
@@ -35,6 +35,33 @@ public final class MediaTools {
 
     public boolean isFfmpegAvailable() {
         return resolveTool(ToolKind.FFMPEG).isPresent();
+    }
+
+    public boolean isSupportedPlatform() {
+        return ToolKind.YT_DLP.filenames(osFamily, arch).length > 0
+                && ToolKind.FFMPEG.filenames(osFamily, arch).length > 0;
+    }
+
+    public String getPlatformKey() {
+        return osFamily.resourceFolder() + "/" + arch.resourceFolder();
+    }
+
+    public String getStatusSummary() {
+        if (!isSupportedPlatform()) {
+            return "Unsupported platform: " + osFamily.displayName() + " (" + archFolder + ").";
+        }
+        boolean yt = isYtDlpAvailable();
+        boolean ff = isFfmpegAvailable();
+        if (yt && ff) {
+            return "media-tools ready for " + getPlatformKey() + ".";
+        }
+        if (!yt && !ff) {
+            return "Missing embedded yt-dlp and ffmpeg for " + getPlatformKey() + ".";
+        }
+        if (!yt) {
+            return "Missing embedded yt-dlp for " + getPlatformKey() + ".";
+        }
+        return "Missing embedded ffmpeg for " + getPlatformKey() + ".";
     }
 
     public String requireYtDlpCommand() {
@@ -65,7 +92,7 @@ public final class MediaTools {
         return resolveTool(ToolKind.FFMPEG).map(ToolResolution::path).map(Path::getParent).orElse(null);
     }
 
-    public void logToolStatus(Logger logger) {
+    public void logToolStatus(java.util.logging.Logger logger) {
         logToolVersion(logger, ToolKind.YT_DLP, "--version");
         logToolVersion(logger, ToolKind.FFMPEG, "-version");
     }
@@ -114,35 +141,64 @@ public final class MediaTools {
         Path platformArchRoot = platformRoot.resolve(archFolder);
         for (String filename : toolKind.filenames(osFamily, arch)) {
             Path target = platformArchRoot.resolve(filename);
+            String resourcePath = RESOURCE_ROOT + "/" + platformFolder + "/" + archFolder + "/" + filename;
+            try (InputStream stream = MediaTools.class.getResourceAsStream(resourcePath)) {
+                if (stream != null) {
+                    Files.createDirectories(target.getParent());
+                    Path hashPath = getHashPath(target);
+                    String existingHash = readHash(hashPath);
+                    Path tmp = Files.createTempFile(target.getParent(), target.getFileName().toString(), ".tmp");
+                    String resourceHash = copyWithDigest(stream, tmp);
+                    if (existingHash == null && Files.exists(target)) {
+                        existingHash = computeFileHash(target);
+                    }
+                    if (existingHash != null && existingHash.equalsIgnoreCase(resourceHash) && Files.exists(target)) {
+                        Files.deleteIfExists(tmp);
+                        writeHash(hashPath, resourceHash);
+                        ensureExecutable(target);
+                        return new ToolResolution(target, ToolSource.CACHED);
+                    }
+                    Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
+                    writeHash(hashPath, resourceHash);
+                    ensureExecutable(target);
+                    return new ToolResolution(target, ToolSource.EMBEDDED);
+                }
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to load embedded " + toolKind.displayName(), e);
+            }
             if (Files.exists(target)) {
                 ensureExecutable(target);
                 return new ToolResolution(target, ToolSource.CACHED);
             }
-            String resourcePath = RESOURCE_ROOT + "/" + platformFolder + "/" + archFolder + "/" + filename;
-            try (InputStream stream = MediaTools.class.getResourceAsStream(resourcePath)) {
-                if (stream == null) {
-                    Path legacyTarget = platformRoot.resolve(filename);
-                    if (Files.exists(legacyTarget)) {
+            Path legacyTarget = platformRoot.resolve(filename);
+            String legacyResourcePath = RESOURCE_ROOT + "/" + platformFolder + "/" + filename;
+            try (InputStream legacyStream = MediaTools.class.getResourceAsStream(legacyResourcePath)) {
+                if (legacyStream != null) {
+                    Files.createDirectories(legacyTarget.getParent());
+                    Path hashPath = getHashPath(legacyTarget);
+                    String existingHash = readHash(hashPath);
+                    Path tmp = Files.createTempFile(legacyTarget.getParent(), legacyTarget.getFileName().toString(), ".tmp");
+                    String resourceHash = copyWithDigest(legacyStream, tmp);
+                    if (existingHash == null && Files.exists(legacyTarget)) {
+                        existingHash = computeFileHash(legacyTarget);
+                    }
+                    if (existingHash != null && existingHash.equalsIgnoreCase(resourceHash) && Files.exists(legacyTarget)) {
+                        Files.deleteIfExists(tmp);
+                        writeHash(hashPath, resourceHash);
                         ensureExecutable(legacyTarget);
                         return new ToolResolution(legacyTarget, ToolSource.CACHED);
                     }
-                    String legacyResourcePath = RESOURCE_ROOT + "/" + platformFolder + "/" + filename;
-                    try (InputStream legacyStream = MediaTools.class.getResourceAsStream(legacyResourcePath)) {
-                        if (legacyStream == null) {
-                            continue;
-                        }
-                        Files.createDirectories(legacyTarget.getParent());
-                        Files.copy(legacyStream, legacyTarget, StandardCopyOption.REPLACE_EXISTING);
-                        ensureExecutable(legacyTarget);
-                        return new ToolResolution(legacyTarget, ToolSource.EMBEDDED);
-                    }
+                    Files.move(tmp, legacyTarget, StandardCopyOption.REPLACE_EXISTING);
+                    writeHash(hashPath, resourceHash);
+                    ensureExecutable(legacyTarget);
+                    return new ToolResolution(legacyTarget, ToolSource.EMBEDDED);
                 }
-                Files.createDirectories(target.getParent());
-                Files.copy(stream, target, StandardCopyOption.REPLACE_EXISTING);
-                ensureExecutable(target);
-                return new ToolResolution(target, ToolSource.EMBEDDED);
             } catch (IOException e) {
                 throw new RuntimeException("Failed to load embedded " + toolKind.displayName(), e);
+            }
+            if (Files.exists(legacyTarget)) {
+                ensureExecutable(legacyTarget);
+                return new ToolResolution(legacyTarget, ToolSource.CACHED);
             }
         }
         return null;
@@ -160,7 +216,77 @@ public final class MediaTools {
         }
     }
 
-    private void logToolVersion(Logger logger, ToolKind toolKind, String versionArg) {
+    private Path getHashPath(Path target) {
+        return target.resolveSibling(target.getFileName().toString() + ".sha256");
+    }
+
+    private String readHash(Path hashPath) {
+        try {
+            if (Files.exists(hashPath)) {
+                return Files.readString(hashPath).trim();
+            }
+        } catch (IOException ignored) {
+        }
+        return null;
+    }
+
+    private void writeHash(Path hashPath, String hash) {
+        try {
+            Files.writeString(hashPath, hash + System.lineSeparator());
+        } catch (IOException ignored) {
+        }
+    }
+
+    private String computeFileHash(Path file) throws IOException {
+        try (InputStream stream = Files.newInputStream(file)) {
+            return computeHash(stream);
+        }
+    }
+
+    private String copyWithDigest(InputStream stream, Path target) throws IOException {
+        MessageDigest digest;
+        try {
+            digest = MessageDigest.getInstance("SHA-256");
+        } catch (Exception e) {
+            throw new IOException("SHA-256 not available", e);
+        }
+        try (InputStream in = stream; java.io.OutputStream out = Files.newOutputStream(target)) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = in.read(buffer)) > 0) {
+                digest.update(buffer, 0, read);
+                out.write(buffer, 0, read);
+            }
+        }
+        return bytesToHex(digest.digest());
+    }
+
+    private String computeHash(InputStream stream) throws IOException {
+        MessageDigest digest;
+        try {
+            digest = MessageDigest.getInstance("SHA-256");
+        } catch (Exception e) {
+            throw new IOException("SHA-256 not available", e);
+        }
+        try (InputStream in = stream) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = in.read(buffer)) > 0) {
+                digest.update(buffer, 0, read);
+            }
+        }
+        return bytesToHex(digest.digest());
+    }
+
+    private String bytesToHex(byte[] bytes) {
+        StringBuilder sb = new StringBuilder(bytes.length * 2);
+        for (byte b : bytes) {
+            sb.append(String.format("%02x", b));
+        }
+        return sb.toString();
+    }
+
+    private void logToolVersion(java.util.logging.Logger logger, ToolKind toolKind, String versionArg) {
         Optional<ToolResolution> resolution = resolveTool(toolKind);
         if (resolution.isEmpty()) {
             logger.log(Level.WARNING, getEmbeddedMissingMessage(toolKind));

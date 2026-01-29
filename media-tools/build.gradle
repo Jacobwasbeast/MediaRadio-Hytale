@@ -18,6 +18,45 @@ dependencies {
     implementation(files("$hytaleHome/install/$patchline/package/game/latest/Server/HytaleServer.jar"))
 }
 
+def registerPlatformJar = { String taskName, String os, String arch ->
+    tasks.register(taskName, Jar) {
+        group = 'distribution'
+        description = "Builds media-tools jar bundled with ${os}/${arch} embedded tools."
+        archiveBaseName = 'media-tools'
+        archiveClassifier = "${os}-${arch}"
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+        dependsOn tasks.named('classes')
+        dependsOn tasks.named('verifyBinaries')
+
+        from(sourceSets.main.output.classesDirs)
+        from(sourceSets.main.output.resourcesDir) {
+            include "manifest.json"
+            include "tools/${os}/${arch}/**"
+        }
+    }
+}
+
+registerPlatformJar('packageWindowsX86_64', 'windows', 'x86_64')
+registerPlatformJar('packageWindowsArm64', 'windows', 'arm64')
+registerPlatformJar('packageMacosX86_64', 'macos', 'x86_64')
+registerPlatformJar('packageMacosArm64', 'macos', 'arm64')
+registerPlatformJar('packageLinuxX86_64', 'linux', 'x86_64')
+registerPlatformJar('packageLinuxArm64', 'linux', 'arm64')
+
+tasks.register('packageCurseforge') {
+    group = 'distribution'
+    description = 'Build all OS/arch MediaRadio jars for CurseForge.'
+    dependsOn(
+            'packageWindowsX86_64',
+            'packageWindowsArm64',
+            'packageMacosX86_64',
+            'packageMacosArm64',
+            'packageLinuxX86_64',
+            'packageLinuxArm64'
+    )
+}
+
 tasks.register('downloadEmbeddedTools') {
     group = 'media-tools'
     description = 'Downloads latest yt-dlp and ffmpeg binaries into media-tools resources.'
@@ -42,6 +81,16 @@ tasks.register('downloadEmbeddedTools') {
             conn.setRequestProperty('User-Agent', 'MediaRadio-EmbeddedTools')
             conn.setConnectTimeout(30000)
             conn.setReadTimeout(30000)
+            if (conn instanceof HttpURLConnection) {
+                int code = conn.responseCode
+                if (code == 403) {
+                    throw new GradleException("Download failed (403 Forbidden): ${url} - access denied or rate-limited. Try again later or use a mirror.")
+                } else if (code == 404) {
+                    throw new GradleException("Download failed (404 Not Found): ${url} - asset missing for this platform.")
+                } else if (code >= 400) {
+                    throw new GradleException("Download failed (HTTP ${code}): ${url}")
+                }
+            }
             conn.getInputStream().withCloseable { input ->
                 dest.withOutputStream { out ->
                     out << input
@@ -116,6 +165,42 @@ tasks.register('downloadEmbeddedTools') {
             }
         }
 
+        def unzipAll = { File zipFile, File destDir ->
+            def tmpDir = new File(tmpRoot, "zip-${System.nanoTime()}")
+            tmpDir.mkdirs()
+            project.copy {
+                from zipTree(zipFile)
+                into tmpDir
+            }
+            def children = tmpDir.listFiles()
+            File rootDir = tmpDir
+            if (children != null) {
+                def dirs = children.findAll { it.isDirectory() }
+                def files = children.findAll { it.isFile() }
+                if (dirs.size() == 1 && files.isEmpty()) {
+                    rootDir = dirs[0]
+                }
+            }
+            if (destDir.exists()) {
+                destDir.deleteDir()
+            }
+            project.copy {
+                from rootDir
+                into destDir
+            }
+        }
+
+        def pruneWindowsFfmpeg = { File destDir ->
+            def docDir = new File(destDir, 'doc')
+            if (docDir.exists()) {
+                docDir.deleteDir()
+            }
+            def presetsDir = new File(destDir, 'presets')
+            if (presetsDir.exists()) {
+                presetsDir.deleteDir()
+            }
+        }
+
         println "Downloading latest yt-dlp release..."
         def ytRelease = jsonSlurper.parseText(readUrl('https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest'))
         def ytAssets = ytRelease.assets.collectEntries { [(it.name): it.browser_download_url] }
@@ -168,7 +253,8 @@ tasks.register('downloadEmbeddedTools') {
         ffmpegUrls.eachWithIndex { entry, idx ->
             def zipFile = new File(tmpRoot, "ffmpeg-riedl-${idx}.zip")
             downloadFile(entry.url, zipFile)
-            unzipSingle(zipFile, entry.suffix, new File(toolsRoot, entry.out))
+            def destDir = new File(toolsRoot, entry.out)
+            unzipAll(zipFile, destDir)
             println "Extracted ${entry.url} -> ${entry.out}"
         }
 
@@ -197,12 +283,14 @@ tasks.register('downloadEmbeddedTools') {
             if (expected != null) {
                 verifySha256(zipFile, expected)
             }
-            unzipSingle(zipFile, '/bin/ffmpeg.exe', new File(toolsRoot, outRel))
+            def destDir = new File(toolsRoot, outRel)
+            unzipAll(zipFile, destDir)
+            pruneWindowsFfmpeg(destDir)
             println "Extracted ${asset.name} -> ${outRel}"
         }
 
-        extractBtbn(win64, 'windows/x86_64/ffmpeg.exe')
-        extractBtbn(winarm64, 'windows/arm64/ffmpeg.exe')
+        extractBtbn(win64, 'windows/x86_64/ffmpeg')
+        extractBtbn(winarm64, 'windows/arm64/ffmpeg')
 
         println "Embedded tools download complete."
     }
@@ -221,24 +309,27 @@ tasks.register('verifyBinaries') {
     description = 'Checks embedded binaries exist and look valid without downloading.'
     doLast {
         def toolsRoot = file('src/main/resources/tools')
-        def expected = [
+        def expectedFiles = [
                 'windows/x86_64/yt-dlp.exe',
                 'windows/arm64/yt-dlp_arm64.exe',
-                'windows/x86_64/ffmpeg.exe',
-                'windows/arm64/ffmpeg.exe',
                 'macos/x86_64/yt-dlp_macos',
                 'macos/arm64/yt-dlp_macos',
+                'linux/x86_64/yt-dlp_linux',
+                'linux/arm64/yt-dlp_linux_aarch64'
+        ]
+
+        def expectedDirs = [
+                'windows/x86_64/ffmpeg',
+                'windows/arm64/ffmpeg',
                 'macos/x86_64/ffmpeg',
                 'macos/arm64/ffmpeg',
-                'linux/x86_64/yt-dlp_linux',
-                'linux/arm64/yt-dlp_linux_aarch64',
                 'linux/x86_64/ffmpeg',
                 'linux/arm64/ffmpeg'
         ]
 
         def warn = { String msg -> println "WARN: ${msg}" }
 
-        expected.each { rel ->
+        expectedFiles.each { rel ->
             def fileObj = new File(toolsRoot, rel)
             if (!fileObj.exists()) {
                 warn("Missing binary: ${rel}")
@@ -251,6 +342,25 @@ tasks.register('verifyBinaries') {
                     && rel.endsWith('.exe') == false
                     && !fileObj.canExecute()) {
                 warn("Binary not executable: ${rel}")
+            }
+        }
+
+        expectedDirs.each { rel ->
+            def dirObj = new File(toolsRoot, rel)
+            if (!dirObj.exists() || !dirObj.isDirectory()) {
+                warn("Missing ffmpeg bundle: ${rel}")
+                return
+            }
+            def binExe = new File(dirObj, 'bin/ffmpeg.exe')
+            def binUnix = new File(dirObj, 'bin/ffmpeg')
+            def nestedBinExe = new File(dirObj, 'ffmpeg/bin/ffmpeg.exe')
+            def nestedBinUnix = new File(dirObj, 'ffmpeg/bin/ffmpeg')
+            def rootExe = new File(dirObj, 'ffmpeg.exe')
+            def rootUnix = new File(dirObj, 'ffmpeg')
+            if (!binExe.exists() && !binUnix.exists()
+                    && !nestedBinExe.exists() && !nestedBinUnix.exists()
+                    && !rootExe.exists() && !rootUnix.exists()) {
+                warn("Missing ffmpeg binary in bundle: ${rel}")
             }
         }
     }

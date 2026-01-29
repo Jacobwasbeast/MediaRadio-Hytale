@@ -36,6 +36,7 @@ style interface with play/pause/stop, seek, looping, and a per-player library.
    - `<os>`: `windows`, `macos`, `linux`
    - `<arch>`: `x86_64`, `arm64`
    - Example: `media-tools/src/main/resources/tools/linux/x86_64/yt-dlp_linux`
+   - ffmpeg bundles should include full archive contents, e.g. `media-tools/src/main/resources/tools/windows/x86_64/ffmpeg/bin/ffmpeg.exe` (Windows) or `.../ffmpeg/ffmpeg` (macOS/Linux)
 2. (Optional) Download the latest binaries automatically:
    - `./gradlew downloadEmbeddedTools`
 3. Build the mod:

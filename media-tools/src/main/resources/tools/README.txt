@@ -16,8 +16,10 @@ Examples:
 - tools/linux/x86_64/yt-dlp_linux
 - tools/linux/arm64/yt-dlp_linux_aarch64
 
-ffmpeg naming is flexible; the loader will try common patterns like:
-- ffmpeg.exe / ffmpeg_arm64.exe (Windows)
-- ffmpeg_macos_arm64 / ffmpeg_macos / ffmpeg (macOS)
-- ffmpeg_linux_aarch64 / ffmpeg_linux / ffmpeg (Linux)
+ffmpeg bundles should include the full archive contents so required files are present.
+Expected layout examples:
+- tools/windows/x86_64/ffmpeg/bin/ffmpeg.exe
+- tools/windows/arm64/ffmpeg/bin/ffmpeg.exe
+- tools/macos/arm64/ffmpeg/ffmpeg
+- tools/linux/arm64/ffmpeg/ffmpeg
 Legacy fallback: tools/<platform>/<filename> (no arch folder) is still supported.

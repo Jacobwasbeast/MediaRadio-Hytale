@@ -141,6 +141,14 @@ public class MediaRadioPlugin extends JavaPlugin {
                     if (mediaManager == null) {
                         return;
                     }
+                    if (!mediaManager.isToolProviderAvailable()) {
+                        var playerRef = event.getPlayerRef();
+                        if (playerRef != null) {
+                            playerRef.sendMessage(Message.raw(
+                                    "MediaRadio requires the media-tools mod. Install the matching media-tools jar for your OS/CPU."));
+                        }
+                        return;
+                    }
                     if (!markerCleanupDone && playbackManager != null) {
                         markerCleanupDone = true;
                         scheduleMarkerCleanupRetries();
