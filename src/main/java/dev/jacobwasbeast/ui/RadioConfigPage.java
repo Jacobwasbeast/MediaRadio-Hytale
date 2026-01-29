@@ -20,6 +20,7 @@ import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import dev.jacobwasbeast.MediaRadioPlugin;
 import com.hypixel.hytale.server.core.Message;
 import dev.jacobwasbeast.manager.PlaybackSession;
+import dev.jacobwasbeast.util.VolumeUtil;
 
 import javax.annotation.Nonnull;
 import java.util.Map;
@@ -34,6 +35,11 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
     private static final Map<UUID, Long> LAST_TIME_SECONDS = new ConcurrentHashMap<>();
     private static final long SEEK_DEBOUNCE_MS = 250;
     private static final Map<UUID, ScrubState> SCRUB_STATES = new ConcurrentHashMap<>();
+    private static final long VOLUME_COOLDOWN_MS = 5000;
+    private static final Map<UUID, Long> LAST_VOLUME_CHANGE_MS = new ConcurrentHashMap<>();
+    private static final Map<UUID, Boolean> VOLUME_EDITING = new ConcurrentHashMap<>();
+    private static final int VOLUME_STEP_PERCENT = 10;
+    private static final int VOLUME_DEFAULT_PERCENT = VolumeUtil.DEFAULT_PERCENT;
 
     private final PlayerRef playerRef;
     private final Vector3i blockPos;
@@ -81,6 +87,12 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
             } else {
                 commandBuilder.set("#NowPlayingThumb.Visible", false);
             }
+
+            // Sync volume input (skip if user is editing)
+            if (!Boolean.TRUE.equals(VOLUME_EDITING.get(playerRef.getUuid()))) {
+                int volumePercent = Math.round(VolumeUtil.clampPercent(VolumeUtil.eventDbToPercent(session.getVolume())));
+                commandBuilder.set("#VolumeInput.Value", String.valueOf(volumePercent));
+            }
         } else {
             commandBuilder.set("#NowPlayingTitle.Text", "No Media Playing");
             commandBuilder.set("#NowPlayingArtist.Text", "");
@@ -88,11 +100,23 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
             commandBuilder.set("#NowPlayingTime.Text", "0:00 / 0:00");
             commandBuilder.set("#SeekSlider.Value", 0);
             commandBuilder.set("#SeekSlider.Visible", false);
+            int volumePercent = VOLUME_DEFAULT_PERCENT;
+            if (blockPos != null) {
+                var playbackManager = MediaRadioPlugin.getInstance().getPlaybackManager();
+                if (playbackManager != null) {
+                    volumePercent = Math.round(
+                            VolumeUtil.clampPercent(
+                                    VolumeUtil.eventDbToPercent(playbackManager.getBlockVolume(blockPos, store))));
+                }
+            }
+            if (!Boolean.TRUE.equals(VOLUME_EDITING.get(playerRef.getUuid()))) {
+                commandBuilder.set("#VolumeInput.Value", String.valueOf(volumePercent));
+            }
             commandBuilder.set("#LoopButton.Text", resolveLoopLabel(null));
             commandBuilder.set("#NowPlayingThumb.Visible", false);
         }
 
-        if (session != null && !session.getUrl().isEmpty()) {
+        if (session != null && session.getUrl() != null && !session.getUrl().isEmpty()) {
             commandBuilder.set("#UrlInput.Value", session.getUrl());
         }
 
@@ -219,14 +243,12 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                         } else {
                             manager.resume(playerRef, store);
                         }
-                        player.sendMessage(Message.translation("Resumed playback."));
                     } else {
                         if (blockPos != null) {
                             manager.pause(blockPos);
                         } else {
                             manager.pauseByUser(playerRef);
                         }
-                        player.sendMessage(Message.translation("Paused playback."));
                     }
                     player.getPageManager().openCustomPage(ref, store, new RadioConfigPage(playerRef, blockPos));
                 }
@@ -253,6 +275,94 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
             return;
         }
 
+        if ("VolumeFocusGained".equals(data.action)) {
+            data.action = null;
+            VOLUME_EDITING.put(playerRef.getUuid(), true);
+            return;
+        }
+
+        if ("VolumeFocusLost".equals(data.action)) {
+            data.action = null;
+            VOLUME_EDITING.remove(playerRef.getUuid());
+            // fall through to process volumeText if present
+        }
+
+        if ("VolumeUp".equals(data.action) || "VolumeDown".equals(data.action)) {
+            boolean up = "VolumeUp".equals(data.action);
+            data.action = null;
+            store.getExternalData().getWorld().execute(() -> {
+                long now = System.currentTimeMillis();
+                Long last = LAST_VOLUME_CHANGE_MS.get(playerRef.getUuid());
+                if (last != null && (now - last) < VOLUME_COOLDOWN_MS) {
+                    return;
+                }
+                PlaybackSession session = resolveSession();
+                if (session != null) {
+                    LAST_VOLUME_CHANGE_MS.put(playerRef.getUuid(), now);
+                    float currentPercent = VolumeUtil.eventDbToPercent(session.getVolume());
+                    float nextPercent = currentPercent + (up ? VOLUME_STEP_PERCENT : -VOLUME_STEP_PERCENT);
+                    float nextClamped = VolumeUtil.clampPercent(nextPercent);
+                    float volDb = VolumeUtil.percentToEventDb(nextClamped);
+                    session.setVolume(volDb);
+
+                    // Replace SoundEvent configs for all chunks with new volume
+                    var mediaManager = MediaRadioPlugin.getInstance().getMediaManager();
+                    if (session.getTrackId() != null) {
+                        mediaManager.updateTrackVolume(session.getTrackId(), session.getTotalChunks(), volDb);
+                    }
+                    if (blockPos != null) {
+                        var playbackManager = MediaRadioPlugin.getInstance().getPlaybackManager();
+                        if (playbackManager != null) {
+                            playbackManager.updateComponent(blockPos, store, component -> component.setVolume(volDb));
+                        }
+                    }
+
+                    UICommandBuilder blockCommandBuilder = new UICommandBuilder();
+                    blockCommandBuilder.set("#VolumeInput.Value", String.valueOf(Math.round(nextClamped)));
+                    UIEventBuilder blockEventBuilder = new UIEventBuilder();
+                    addEventBindings(blockEventBuilder);
+                    sendUpdate(blockCommandBuilder, blockEventBuilder, false);
+                }
+            });
+            return;
+        }
+
+        if (data.volumeText != null) {
+            String volumeTextValue = data.volumeText;
+            data.volumeText = null;
+            float percentValue = parseVolumePercent(volumeTextValue);
+            if (percentValue >= 0.0f) {
+                store.getExternalData().getWorld().execute(() -> {
+                    PlaybackSession session = resolveSession();
+                    if (session != null) {
+                        LAST_VOLUME_CHANGE_MS.put(playerRef.getUuid(), System.currentTimeMillis());
+                        float nextClamped = VolumeUtil.clampPercent(percentValue);
+                        float volDb = VolumeUtil.percentToEventDb(nextClamped);
+                        session.setVolume(volDb);
+
+                        // Replace SoundEvent configs for all chunks with new volume
+                        var mediaManager = MediaRadioPlugin.getInstance().getMediaManager();
+                        if (session.getTrackId() != null) {
+                            mediaManager.updateTrackVolume(session.getTrackId(), session.getTotalChunks(), volDb);
+                        }
+                        if (blockPos != null) {
+                            var playbackManager = MediaRadioPlugin.getInstance().getPlaybackManager();
+                            if (playbackManager != null) {
+                                playbackManager.updateComponent(blockPos, store, component -> component.setVolume(volDb));
+                            }
+                        }
+
+                        UICommandBuilder blockCommandBuilder = new UICommandBuilder();
+                        blockCommandBuilder.set("#VolumeInput.Value", String.valueOf(Math.round(nextClamped)));
+                        UIEventBuilder blockEventBuilder = new UIEventBuilder();
+                        addEventBindings(blockEventBuilder);
+                        sendUpdate(blockCommandBuilder, blockEventBuilder, false);
+                    }
+                });
+            }
+            return;
+        }
+
         String url = data.url;
         if (url == null || url.isEmpty()) {
             url = data.directUrl;
@@ -275,53 +385,14 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                 store.getExternalData().getWorld().execute(() -> {
                     // Start playback
                     if (blockPos != null) {
-                        if (library != null) {
-                            library.upsertSongStatus(
-                                    playerRef.getUuid().toString(),
-                                    mediaInfo.url,
-                                    "Preparing...",
-                                    mediaInfo.title != null ? mediaInfo.title : "Unknown Title",
-                                    mediaInfo.artist != null ? mediaInfo.artist : "Unknown Artist",
-                                    mediaInfo.thumbnailUrl != null ? mediaInfo.thumbnailUrl : "",
-                                    mediaInfo.duration,
-                                    mediaInfo.trackId,
-                                    mediaInfo.thumbnailAssetPath);
-                            player.getPageManager().openCustomPage(ref, store,
-                                    new RadioConfigPage(playerRef, blockPos));
-                        }
                         MediaRadioPlugin.getInstance().getMediaManager()
                                 .playSoundAtBlock(mediaInfo, blockPos,
                                         MediaRadioPlugin.getInstance().getConfig().getChunkDurationMs(), store)
-                                .thenRun(() -> store.getExternalData().getWorld().execute(() -> {
-                                    if (library != null) {
-                                        library.upsertSongStatus(
-                                                playerRef.getUuid().toString(),
-                                                mediaInfo.url,
-                                                "Playing",
-                                                mediaInfo.title != null ? mediaInfo.title : "Unknown Title",
-                                                mediaInfo.artist != null ? mediaInfo.artist : "Unknown Artist",
-                                                mediaInfo.thumbnailUrl != null ? mediaInfo.thumbnailUrl : "",
-                                                mediaInfo.duration,
-                                                mediaInfo.trackId,
-                                                mediaInfo.thumbnailAssetPath);
-                                        player.getPageManager().openCustomPage(ref, store,
-                                                new RadioConfigPage(playerRef, blockPos));
-                                    }
-                                }))
+                                .thenRun(() -> store.getExternalData().getWorld().execute(
+                                        () -> player.getPageManager().openCustomPage(ref, store,
+                                                new RadioConfigPage(playerRef, blockPos))))
                                 .exceptionally(ex -> {
                                     store.getExternalData().getWorld().execute(() -> {
-                                        if (library != null) {
-                                            library.upsertSongStatus(
-                                                    playerRef.getUuid().toString(),
-                                                    mediaInfo.url,
-                                                    "Failed",
-                                                    mediaInfo.title != null ? mediaInfo.title : "Unknown Title",
-                                                    mediaInfo.artist != null ? mediaInfo.artist : "Unknown Artist",
-                                                    mediaInfo.thumbnailUrl != null ? mediaInfo.thumbnailUrl : "",
-                                                    mediaInfo.duration,
-                                                    mediaInfo.trackId,
-                                                    mediaInfo.thumbnailAssetPath);
-                                        }
                                         String reason = extractFailureReason(ex);
                                         sendChatAndClose(ref, store,
                                                 reason.isEmpty()
@@ -331,52 +402,13 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                                     return null;
                                 });
                     } else {
-                        if (library != null) {
-                            library.upsertSongStatus(
-                                    playerRef.getUuid().toString(),
-                                    mediaInfo.url,
-                                    "Preparing...",
-                                    mediaInfo.title != null ? mediaInfo.title : "Unknown Title",
-                                    mediaInfo.artist != null ? mediaInfo.artist : "Unknown Artist",
-                                    mediaInfo.thumbnailUrl != null ? mediaInfo.thumbnailUrl : "",
-                                    mediaInfo.duration,
-                                    mediaInfo.trackId,
-                                    mediaInfo.thumbnailAssetPath);
-                            player.getPageManager().openCustomPage(ref, store,
-                                    new RadioConfigPage(playerRef, blockPos));
-                        }
                         MediaRadioPlugin.getInstance().getMediaManager()
                                 .playSound(mediaInfo, playerRef, store)
-                                .thenRun(() -> store.getExternalData().getWorld().execute(() -> {
-                                    if (library != null) {
-                                        library.upsertSongStatus(
-                                                playerRef.getUuid().toString(),
-                                                mediaInfo.url,
-                                                "Playing",
-                                                mediaInfo.title != null ? mediaInfo.title : "Unknown Title",
-                                                mediaInfo.artist != null ? mediaInfo.artist : "Unknown Artist",
-                                                mediaInfo.thumbnailUrl != null ? mediaInfo.thumbnailUrl : "",
-                                                mediaInfo.duration,
-                                                mediaInfo.trackId,
-                                                mediaInfo.thumbnailAssetPath);
-                                        player.getPageManager().openCustomPage(ref, store,
-                                                new RadioConfigPage(playerRef, blockPos));
-                                    }
-                                }))
+                                .thenRun(() -> store.getExternalData().getWorld().execute(
+                                        () -> player.getPageManager().openCustomPage(ref, store,
+                                                new RadioConfigPage(playerRef, blockPos))))
                                 .exceptionally(ex -> {
                                     store.getExternalData().getWorld().execute(() -> {
-                                        if (library != null) {
-                                            library.upsertSongStatus(
-                                                    playerRef.getUuid().toString(),
-                                                    mediaInfo.url,
-                                                    "Failed",
-                                                    mediaInfo.title != null ? mediaInfo.title : "Unknown Title",
-                                                    mediaInfo.artist != null ? mediaInfo.artist : "Unknown Artist",
-                                                    mediaInfo.thumbnailUrl != null ? mediaInfo.thumbnailUrl : "",
-                                                    mediaInfo.duration,
-                                                    mediaInfo.trackId,
-                                                    mediaInfo.thumbnailAssetPath);
-                                        }
                                         String reason = extractFailureReason(ex);
                                         sendChatAndClose(ref, store,
                                                 reason.isEmpty()
@@ -386,45 +418,14 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                                     return null;
                                 });
                     }
-
-                    // Save to library
-                    if (library != null) {
-                        library.upsertSongStatus(
-                                playerRef.getUuid().toString(),
-                                mediaInfo.url,
-                                "Queued",
-                                mediaInfo.title != null ? mediaInfo.title : "Unknown Title",
-                                mediaInfo.artist != null ? mediaInfo.artist : "Unknown Artist",
-                                mediaInfo.thumbnailUrl != null ? mediaInfo.thumbnailUrl : "",
-                                mediaInfo.duration,
-                                mediaInfo.trackId,
-                                mediaInfo.thumbnailAssetPath);
-                    }
-
-                    // Feedback
-                    Player p = store.getComponent(ref, Player.getComponentType());
-                    if (p != null) {
-                        p.sendMessage(Message
-                                .translation("Playing: " + (mediaInfo.title != null ? mediaInfo.title : "Unknown")));
-
-                        // Refresh UI to show new song details
-                        p.getPageManager().openCustomPage(ref, store, new RadioConfigPage(playerRef, blockPos));
-                    }
                 });
             }).exceptionally(e -> {
                 store.getExternalData().getWorld().execute(() -> {
                     String reason = extractFailureReason(e);
                     sendChatAndClose(ref, store,
                             reason.isEmpty()
-                                    ? "Failed to load media. Removed from library."
+                                    ? "Failed to load media."
                                     : "Failed to load media: " + reason);
-                    if (library != null) {
-                        String playerId = playerRef.getUuid().toString();
-                        library.removeSong(playerId, finalUrl);
-                        if (!library.isUrlReferencedByOtherPlayers(playerId, finalUrl)) {
-                            MediaRadioPlugin.getInstance().getMediaManager().deleteMediaForUrl(finalUrl);
-                        }
-                    }
                 });
                 return null;
             });
@@ -442,12 +443,16 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                 .add()
                 .append(new KeyedCodec<>("@SeekValue", Codec.FLOAT), (d, v) -> d.seekValue = v, d -> d.seekValue)
                 .add()
+                .append(new KeyedCodec<>("@VolumeText", Codec.STRING), (d, v) -> d.volumeText = v,
+                        d -> d.volumeText)
+                .add()
                 .build();
 
         public String action;
         public String url;
         public String directUrl;
         public Float seekValue;
+        public String volumeText;
     }
 
     @Override
@@ -489,6 +494,7 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
         if (ref == null || !ref.isValid()) {
             return false;
         }
+        Store<EntityStore> store = ref.getStore();
         ScrubState scrubState = SCRUB_STATES.get(playerRef.getUuid());
         if (scrubState != null && scrubState.isScrubbing) {
             return true;
@@ -524,6 +530,12 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
             } else {
                 commandBuilder.set("#NowPlayingThumb.Visible", false);
             }
+
+            // Sync volume input
+            if (!Boolean.TRUE.equals(VOLUME_EDITING.get(playerRef.getUuid()))) {
+                int volumePercent = Math.round(VolumeUtil.clampPercent(VolumeUtil.eventDbToPercent(session.getVolume())));
+                commandBuilder.set("#VolumeInput.Value", String.valueOf(volumePercent));
+            }
         } else {
             LAST_TIME_SECONDS.remove(playerId);
             commandBuilder.set("#NowPlayingTime.Text", "0:00 / 0:00");
@@ -531,6 +543,18 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
             commandBuilder.set("#SeekSlider.Visible", false);
             commandBuilder.set("#LoopButton.Text", resolveLoopLabel(null));
             commandBuilder.set("#NowPlayingThumb.Visible", false);
+            int volumePercent = VOLUME_DEFAULT_PERCENT;
+            if (blockPos != null) {
+                var playbackManager = MediaRadioPlugin.getInstance().getPlaybackManager();
+                if (playbackManager != null) {
+                    volumePercent = Math.round(
+                            VolumeUtil.clampPercent(
+                                    VolumeUtil.eventDbToPercent(playbackManager.getBlockVolume(blockPos, store))));
+                }
+            }
+            if (!Boolean.TRUE.equals(VOLUME_EDITING.get(playerRef.getUuid()))) {
+                commandBuilder.set("#VolumeInput.Value", String.valueOf(volumePercent));
+            }
         }
         UIEventBuilder eventBuilder = new UIEventBuilder();
         addEventBindings(eventBuilder);
@@ -651,6 +675,29 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                 EventData.of("Action", "Cancel"), false);
         eventBuilder.addEventBinding(CustomUIEventBindingType.ValueChanged, "#SeekSlider",
                 EventData.of("@SeekValue", "#SeekSlider.Value"), false);
+        eventBuilder.addEventBinding(CustomUIEventBindingType.FocusGained, "#VolumeInput",
+                EventData.of("Action", "VolumeFocusGained"), false);
+        eventBuilder.addEventBinding(CustomUIEventBindingType.FocusLost, "#VolumeInput",
+                EventData.of("Action", "VolumeFocusLost").append("@VolumeText", "#VolumeInput.Value"), false);
+        eventBuilder.addEventBinding(CustomUIEventBindingType.Activating, "#VolumeUp",
+                EventData.of("Action", "VolumeUp"), false);
+        eventBuilder.addEventBinding(CustomUIEventBindingType.Activating, "#VolumeDown",
+                EventData.of("Action", "VolumeDown"), false);
+    }
+
+    private float parseVolumePercent(String text) {
+        if (text == null) {
+            return -1.0f;
+        }
+        String trimmed = text.trim();
+        if (trimmed.isEmpty()) {
+            return -1.0f;
+        }
+        try {
+            return Float.parseFloat(trimmed);
+        } catch (NumberFormatException e) {
+            return -1.0f;
+        }
     }
 
     private void sendChatAndClose(Ref<EntityStore> ref, Store<EntityStore> store, String message) {

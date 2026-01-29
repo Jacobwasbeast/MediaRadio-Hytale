@@ -68,8 +68,8 @@ public class MediaRadioPlugin extends JavaPlugin {
         }
 
         // Register Components
-        dev.jacobwasbeast.component.RadioComponent.COMPONENT_TYPE = com.hypixel.hytale.server.core.modules.entity.EntityModule
-                .get().getEntityStoreRegistry().registerComponent(dev.jacobwasbeast.component.RadioComponent.class,
+        dev.jacobwasbeast.component.RadioComponent.COMPONENT_TYPE = this.getChunkStoreRegistry()
+                .registerComponent(dev.jacobwasbeast.component.RadioComponent.class,
                         "media_radio:radio", dev.jacobwasbeast.component.RadioComponent.CODEC);
 
         // Register Systems

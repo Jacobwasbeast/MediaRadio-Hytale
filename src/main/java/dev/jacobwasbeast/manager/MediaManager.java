@@ -15,6 +15,7 @@ import com.hypixel.hytale.server.core.asset.common.asset.FileCommonAsset;
 import com.hypixel.hytale.server.core.asset.type.model.config.ModelAsset;
 import com.hypixel.hytale.server.core.asset.type.soundevent.config.SoundEvent;
 import dev.jacobwasbeast.MediaRadioPlugin;
+import dev.jacobwasbeast.util.VolumeUtil;
 
 import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
@@ -384,6 +385,10 @@ public class MediaManager {
     }
 
     private void createSoundEvents(String trackId, int chunkCount) {
+        createSoundEvents(trackId, chunkCount, 0.0f);
+    }
+
+    private void createSoundEvents(String trackId, int chunkCount, float volumeDb) {
         // Create SoundEvent for each chunk
         for (int i = 0; i < chunkCount; i++) {
             String chunkTrackId = String.format("%s_Chunk_%03d", trackId, i);
@@ -391,27 +396,30 @@ public class MediaManager {
 
             // Map file path: Sounds/media_radio/trackId_Chunk_000.ogg
             String soundFilePath = String.format("Sounds/media_radio/%s_Chunk_%03d.ogg", trackId, i);
-
-            Map<String, Object> layer = new HashMap<>();
-            layer.put("Files", Collections.singletonList(soundFilePath));
-            layer.put("Volume", 1.0); // Full volume, controlled by category/distance
-
-            Map<String, Object> soundEvent = new HashMap<>();
-            soundEvent.put("Layers", Collections.singletonList(layer));
-            soundEvent.put("Volume", 0.0);
-            soundEvent.put("Pitch", 0.0);
-            soundEvent.put("MaxDistance", 60); // 60 blocks audible distance
-            soundEvent.put("StartAttenuationDistance", 10);
-            soundEvent.put("Parent", "SFX_Attn_Quiet");
-
-            try (Writer writer = Files.newBufferedWriter(jsonPath)) {
-                GSON.toJson(soundEvent, writer);
-            } catch (IOException e) {
-                plugin.getLogger().at(Level.SEVERE).withCause(e).log("Failed to write SoundEvent for chunk %d", i);
-            }
+            writeSoundEventConfig(jsonPath, soundFilePath, volumeDb);
         }
         plugin.getLogger().at(Level.INFO).log("Created %d SoundEvent configs for %s", chunkCount, trackId);
         plugin.getLogger().at(Level.INFO).log("Created %d SoundEvent configs for %s", chunkCount, trackId);
+    }
+
+    private void writeSoundEventConfig(Path jsonPath, String soundFilePath, float volumeDb) {
+        Map<String, Object> layer = new HashMap<>();
+        layer.put("Files", Collections.singletonList(soundFilePath));
+        layer.put("Volume", VolumeUtil.percentToLayerDb(VolumeUtil.eventDbToPercent(volumeDb)));
+
+        Map<String, Object> soundEvent = new HashMap<>();
+        soundEvent.put("StartAttenuationDistance", 10);
+        soundEvent.put("MaxDistance", 60);
+        soundEvent.put("Volume", volumeDb);
+        soundEvent.put("Parent", "SFX_Attn_Quiet");
+        soundEvent.put("Pitch", 0.0);
+        soundEvent.put("Layers", Collections.singletonList(layer));
+
+        try (Writer writer = Files.newBufferedWriter(jsonPath)) {
+            GSON.toJson(soundEvent, writer);
+        } catch (IOException e) {
+            plugin.getLogger().at(Level.SEVERE).withCause(e).log("Failed to write SoundEvent at %s", jsonPath);
+        }
     }
 
     private void registerCommonSoundAssets(String trackId, int chunkCount) {
@@ -438,6 +446,23 @@ public class MediaManager {
                 plugin.getLogger().at(Level.WARNING).withCause(e).log("Failed to register sound asset %s", assetName);
             }
         }
+    }
+
+    public void updateTrackVolume(String trackId, int chunkCount, float volumeDb) {
+        if (chunkCount <= 0) {
+            return;
+        }
+        for (int i = 0; i < chunkCount; i++) {
+            updateChunkVolume(trackId, i, volumeDb);
+        }
+        plugin.getLogger().at(Level.INFO).log("Updated volume for %s to %.1f dB", trackId, volumeDb);
+    }
+
+    public void updateChunkVolume(String trackId, int chunkIndex, float volumeDb) {
+        String chunkTrackId = String.format("%s_Chunk_%03d", trackId, chunkIndex);
+        Path jsonPath = serverSoundEventsPath.resolve(chunkTrackId + ".json");
+        String soundFilePath = String.format("Sounds/media_radio/%s_Chunk_%03d.ogg", trackId, chunkIndex);
+        writeSoundEventConfig(jsonPath, soundFilePath, volumeDb);
     }
 
     private void loadSoundEventAssets(String trackId, int chunkCount) {
@@ -471,7 +496,8 @@ public class MediaManager {
             return CompletableFuture.completedFuture(null);
         }
         CompletableFuture<Void> result = new CompletableFuture<>();
-        prepareRuntimeAssetsAsync(mediaInfo, 750).thenAccept(totalChunks -> {
+        prepareRuntimeAssetsAsync(mediaInfo, 750, VolumeUtil.percentToEventDb(VolumeUtil.DEFAULT_PERCENT))
+                .thenAccept(totalChunks -> {
             if (totalChunks <= 0) {
                 plugin.getLogger().at(Level.WARNING).log("No chunks available for %s", mediaInfo.trackId);
                 result.completeExceptionally(new RuntimeException("Failed to prepare media assets (0 chunks)"));
@@ -496,7 +522,11 @@ public class MediaManager {
             return CompletableFuture.completedFuture(null);
         }
         CompletableFuture<Void> result = new CompletableFuture<>();
-        prepareRuntimeAssetsAsync(mediaInfo, chunkDurationMs).thenAccept(totalChunks -> {
+        float volumeDb = VolumeUtil.percentToEventDb(VolumeUtil.DEFAULT_PERCENT);
+        if (plugin.getPlaybackManager() != null) {
+            volumeDb = plugin.getPlaybackManager().getBlockVolume(blockPos, store);
+        }
+        prepareRuntimeAssetsAsync(mediaInfo, chunkDurationMs, volumeDb).thenAccept(totalChunks -> {
             if (totalChunks <= 0) {
                 plugin.getLogger().at(Level.WARNING).log("No chunks available for %s", mediaInfo.trackId);
                 result.completeExceptionally(new RuntimeException("Failed to prepare media assets (0 chunks)"));
@@ -518,9 +548,10 @@ public class MediaManager {
         return resolveChunkCount(trackId);
     }
 
-    private CompletableFuture<Integer> prepareRuntimeAssetsAsync(MediaInfo mediaInfo, int chunkDurationMs) {
+    private CompletableFuture<Integer> prepareRuntimeAssetsAsync(MediaInfo mediaInfo, int chunkDurationMs,
+            float volumeDb) {
         return CompletableFuture.supplyAsync(
-                () -> ensureRuntimeAssets(mediaInfo, chunkDurationMs),
+                () -> ensureRuntimeAssets(mediaInfo, chunkDurationMs, volumeDb),
                 com.hypixel.hytale.server.core.HytaleServer.SCHEDULED_EXECUTOR);
     }
 
@@ -536,7 +567,7 @@ public class MediaManager {
                 mediaInfo.thumbnailAssetPath);
     }
 
-    private int ensureRuntimeAssets(MediaInfo mediaInfo, int chunkDurationMs) {
+    private int ensureRuntimeAssets(MediaInfo mediaInfo, int chunkDurationMs, float volumeDb) {
         if (mediaInfo == null) {
             return 0;
         }
@@ -570,7 +601,7 @@ public class MediaManager {
                 chunkCount = splitAudio(trackId, seconds);
                 if (chunkCount > 0) {
                     registerCommonSoundAssets(trackId, chunkCount);
-                    createSoundEvents(trackId, chunkCount);
+                    createSoundEvents(trackId, chunkCount, volumeDb);
                     loadSoundEventAssets(trackId, chunkCount);
 
                     // Create the Unified Model once

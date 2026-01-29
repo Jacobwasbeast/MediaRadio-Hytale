@@ -5,12 +5,12 @@ import com.hypixel.hytale.codec.KeyedCodec;
 import com.hypixel.hytale.codec.builder.BuilderCodec;
 import com.hypixel.hytale.component.Component;
 import com.hypixel.hytale.component.ComponentType;
-import com.hypixel.hytale.server.core.modules.entity.EntityModule;
-import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
+import com.hypixel.hytale.server.core.universe.world.storage.ChunkStore;
+import dev.jacobwasbeast.util.VolumeUtil;
 
 import javax.annotation.Nonnull;
 
-public class RadioComponent implements Component<EntityStore> {
+public class RadioComponent implements Component<ChunkStore> {
     public static final BuilderCodec<RadioComponent> CODEC = BuilderCodec
             .builder(RadioComponent.class, RadioComponent::new)
             .append(new KeyedCodec<>("TrackId", Codec.STRING), (component, v) -> component.trackId = v,
@@ -34,6 +34,9 @@ public class RadioComponent implements Component<EntityStore> {
             .append(new KeyedCodec<>("CurrentTime", Codec.LONG), (component, v) -> component.currentTime = v,
                     component -> component.currentTime)
             .add()
+            .append(new KeyedCodec<>("Volume", Codec.FLOAT), (component, v) -> component.volume = v,
+                    component -> component.volume)
+            .add()
             .build();
 
     private String trackId = "";
@@ -43,15 +46,16 @@ public class RadioComponent implements Component<EntityStore> {
     private String thumbnailUrl = "";
     private long duration = 0;
     private long currentTime = 0;
+    private float volume = VolumeUtil.percentToEventDb(VolumeUtil.DEFAULT_PERCENT); // decibels
 
     // ComponentType must be registered in the plugin
-    public static ComponentType<EntityStore, RadioComponent> COMPONENT_TYPE;
+    public static ComponentType<ChunkStore, RadioComponent> COMPONENT_TYPE;
 
     public RadioComponent() {
     }
 
     public RadioComponent(String trackId, boolean isPlaying, String title, String artist, String thumbnailUrl,
-            long duration, long currentTime) {
+            long duration, long currentTime, float volume) {
         this.trackId = trackId;
         this.isPlaying = isPlaying;
         this.title = title;
@@ -59,6 +63,7 @@ public class RadioComponent implements Component<EntityStore> {
         this.thumbnailUrl = thumbnailUrl;
         this.duration = duration;
         this.currentTime = currentTime;
+        this.volume = volume;
     }
 
     public String getTrackId() {
@@ -117,9 +122,17 @@ public class RadioComponent implements Component<EntityStore> {
         this.currentTime = currentTime;
     }
 
+    public float getVolume() {
+        return volume;
+    }
+
+    public void setVolume(float volume) {
+        this.volume = volume;
+    }
+
     @Nonnull
     @Override
-    public Component<EntityStore> clone() {
-        return new RadioComponent(trackId, isPlaying, title, artist, thumbnailUrl, duration, currentTime);
+    public Component<ChunkStore> clone() {
+        return new RadioComponent(trackId, isPlaying, title, artist, thumbnailUrl, duration, currentTime, volume);
     }
 }

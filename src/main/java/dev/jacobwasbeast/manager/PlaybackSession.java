@@ -6,6 +6,7 @@ import com.hypixel.hytale.math.vector.Vector3i;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
+import dev.jacobwasbeast.util.VolumeUtil;
 import com.hypixel.hytale.server.npc.entities.NPCEntity;
 
 /**
@@ -25,6 +26,7 @@ public class PlaybackSession {
     private final int totalChunks;
     private final int chunkDurationMs;
     private final long totalDurationMs;
+    private float volume = VolumeUtil.percentToEventDb(VolumeUtil.DEFAULT_PERCENT); // decibels
 
     private Ref<EntityStore> markerEntity;
     private NPCEntity npcEntity;
@@ -57,6 +59,7 @@ public class PlaybackSession {
         this.totalChunks = totalChunks;
         this.chunkDurationMs = chunkDurationMs;
         this.totalDurationMs = durationMs > 0 ? durationMs : (long) totalChunks * chunkDurationMs;
+        this.volume = VolumeUtil.percentToEventDb(VolumeUtil.DEFAULT_PERCENT);
     }
 
     public PlaybackSession(String trackId, PlayerRef playerRef, int totalChunks, int chunkDurationMs, String title,
@@ -71,6 +74,7 @@ public class PlaybackSession {
         this.totalChunks = totalChunks;
         this.chunkDurationMs = chunkDurationMs;
         this.totalDurationMs = durationMs > 0 ? durationMs : (long) totalChunks * chunkDurationMs;
+        this.volume = VolumeUtil.percentToEventDb(VolumeUtil.DEFAULT_PERCENT);
     }
 
     public String getTrackId() {
@@ -117,6 +121,14 @@ public class PlaybackSession {
 
     public long getTotalDurationMs() {
         return totalDurationMs;
+    }
+
+    public float getVolume() {
+        return volume;
+    }
+
+    public void setVolume(float volume) {
+        this.volume = volume;
     }
 
     public int getCurrentChunk() {

@@ -20,7 +20,7 @@ $C.@Container {
             LayoutMode: Left;
             Background: $C.@InputBoxBackground;
             Padding: (Full: 12);
-            Anchor: (Height: 140);
+            Anchor: (Height: 170);
 
             AssetImage #NowPlayingThumb {
                 Anchor: (Width: 96, Height: 96);
@@ -66,6 +66,38 @@ $C.@Container {
                     Value: 0;
                 }
 
+                Group {
+                    LayoutMode: Left;
+                    Anchor: (Top: 14, Height: 22);
+
+                    Label #VolumeLabel {
+                        Text: "Volume %";
+                        Style: LabelStyle(
+                            TextColor: #96a9be,
+                            FontSize: 13
+                        );
+                        Anchor: (Width: 80);
+                    }
+
+                    $C.@TextField #VolumeInput {
+                        @Anchor = (Width: 62, Height: 20);
+                        PlaceholderText: "100";
+                    }
+
+                    Group { Anchor: (Width: 6); }
+
+                    $C.@SmallSecondaryTextButton #VolumeDown {
+                        Text: "-";
+                        Anchor: (Width: 26, Height: 20);
+                    }
+
+                    Group { Anchor: (Width: 4); }
+
+                    $C.@SmallSecondaryTextButton #VolumeUp {
+                        Text: "+";
+                        Anchor: (Width: 26, Height: 20);
+                    }
+                }
             }
         }
 

@@ -1,20 +1,27 @@
 package dev.jacobwasbeast.manager;
 
+import com.hypixel.hytale.component.AddReason;
 import com.hypixel.hytale.component.ComponentAccessor;
+import com.hypixel.hytale.component.Holder;
+import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.math.vector.Vector3i;
 import com.hypixel.hytale.math.vector.Vector3d;
 import com.hypixel.hytale.math.vector.Vector3f;
-import com.hypixel.hytale.protocol.SoundCategory;
+import com.hypixel.hytale.math.util.ChunkUtil;
 import com.hypixel.hytale.server.core.asset.type.soundevent.config.SoundEvent;
 import com.hypixel.hytale.server.core.asset.type.model.config.ModelAsset;
 import com.hypixel.hytale.server.core.entity.entities.Player;
+import com.hypixel.hytale.server.core.modules.block.BlockModule;
 import com.hypixel.hytale.server.core.modules.entity.component.TransformComponent;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
-import com.hypixel.hytale.server.core.universe.world.SoundUtil;
+import com.hypixel.hytale.server.core.universe.world.World;
+import com.hypixel.hytale.server.core.universe.world.chunk.BlockComponentChunk;
+import com.hypixel.hytale.server.core.universe.world.storage.ChunkStore;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import dev.jacobwasbeast.MediaRadioPlugin;
 import dev.jacobwasbeast.util.RadioItemUtil;
+import dev.jacobwasbeast.util.VolumeUtil;
 
 import java.util.Map;
 import java.util.UUID;
@@ -24,11 +31,7 @@ import java.util.logging.Level;
 import com.hypixel.hytale.protocol.AnimationSlot;
 import com.hypixel.hytale.server.npc.NPCPlugin;
 import com.hypixel.hytale.server.core.asset.type.model.config.Model;
-import com.hypixel.hytale.component.Ref;
-import com.hypixel.hytale.function.consumer.TriConsumer;
-import com.hypixel.hytale.component.Holder;
 import com.hypixel.hytale.server.npc.entities.NPCEntity;
-import com.hypixel.hytale.server.core.modules.entity.tracker.NetworkId;
 
 /**
  * Manages active playback sessions for all radio blocks.
@@ -89,6 +92,7 @@ public class MediaPlaybackManager {
 
         // Start playback
         session.play();
+        session.setVolume(getVolume(blockPos, store));
         playCurrentChunk(session, store);
 
         plugin.getLogger().at(Level.INFO).log("Started playback: track=%s, chunks=%d, duration=%dms each",
@@ -128,6 +132,7 @@ public class MediaPlaybackManager {
         activeBlockSessions.put(key, session);
 
         session.play();
+        session.setVolume(getVolume(blockPos, store));
         playCurrentChunk(session, store);
 
         plugin.getLogger().at(Level.INFO).log("Started block playback: track=%s, chunks=%d, duration=%dms each",
@@ -343,6 +348,81 @@ public class MediaPlaybackManager {
         }
     }
 
+    public void updateComponent(Vector3i pos, Store<EntityStore> store,
+            java.util.function.Consumer<dev.jacobwasbeast.component.RadioComponent> updater) {
+        if (pos == null || store == null || updater == null) {
+            return;
+        }
+        World world = store.getExternalData().getWorld();
+        if (world == null) {
+            return;
+        }
+        ChunkStore chunkStore = world.getChunkStore();
+        Ref<ChunkStore> blockRef = getOrCreateBlockEntityRef(chunkStore, pos);
+        if (blockRef == null || !blockRef.isValid()) {
+            return;
+        }
+        chunkStore.getStore().ensureComponent(blockRef, dev.jacobwasbeast.component.RadioComponent.COMPONENT_TYPE);
+        dev.jacobwasbeast.component.RadioComponent component = chunkStore.getStore()
+                .getComponent(blockRef, dev.jacobwasbeast.component.RadioComponent.COMPONENT_TYPE);
+        if (component == null) {
+            return;
+        }
+        updater.accept(component);
+    }
+
+    private float getVolume(Vector3i pos, Store<EntityStore> store) {
+        if (pos == null || store == null) {
+            return VolumeUtil.percentToEventDb(VolumeUtil.DEFAULT_PERCENT);
+        }
+        World world = store.getExternalData().getWorld();
+        if (world == null) {
+            return VolumeUtil.percentToEventDb(VolumeUtil.DEFAULT_PERCENT);
+        }
+        ChunkStore chunkStore = world.getChunkStore();
+        Ref<ChunkStore> blockRef = getOrCreateBlockEntityRef(chunkStore, pos);
+        if (blockRef == null || !blockRef.isValid()) {
+            return VolumeUtil.percentToEventDb(VolumeUtil.DEFAULT_PERCENT);
+        }
+        dev.jacobwasbeast.component.RadioComponent component = chunkStore.getStore()
+                .getComponent(blockRef, dev.jacobwasbeast.component.RadioComponent.COMPONENT_TYPE);
+        if (component == null) {
+            chunkStore.getStore().ensureComponent(blockRef, dev.jacobwasbeast.component.RadioComponent.COMPONENT_TYPE);
+            component = chunkStore.getStore()
+                    .getComponent(blockRef, dev.jacobwasbeast.component.RadioComponent.COMPONENT_TYPE);
+        }
+        return component != null ? component.getVolume() : VolumeUtil.percentToEventDb(VolumeUtil.DEFAULT_PERCENT);
+    }
+
+    public float getBlockVolume(Vector3i pos, Store<EntityStore> store) {
+        return getVolume(pos, store);
+    }
+
+    private Ref<ChunkStore> getOrCreateBlockEntityRef(ChunkStore chunkStore, Vector3i pos) {
+        if (chunkStore == null || pos == null) {
+            return null;
+        }
+        Ref<ChunkStore> chunkRef = chunkStore.getChunkReference(ChunkUtil.indexChunkFromBlock(pos.getX(), pos.getZ()));
+        if (chunkRef == null) {
+            return null;
+        }
+        BlockComponentChunk blockComponentChunk = chunkStore.getStore().getComponent(chunkRef,
+                BlockComponentChunk.getComponentType());
+        if (blockComponentChunk == null) {
+            return null;
+        }
+        int blockIndex = ChunkUtil.indexBlockInColumn(pos.getX(), pos.getY(), pos.getZ());
+        Ref<ChunkStore> blockRef = blockComponentChunk.getEntityReference(blockIndex);
+        if (blockRef != null && blockRef.isValid()) {
+            return blockRef;
+        }
+        Holder<ChunkStore> holder = ChunkStore.REGISTRY.newHolder();
+        holder.putComponent(BlockModule.BlockStateInfo.getComponentType(),
+                new BlockModule.BlockStateInfo(blockIndex, chunkRef));
+        holder.ensureComponent(dev.jacobwasbeast.component.RadioComponent.COMPONENT_TYPE);
+        return chunkStore.getStore().addEntity(holder, AddReason.SPAWN);
+    }
+
     /**
      * Get playback status for UI
      */
@@ -405,6 +485,7 @@ public class MediaPlaybackManager {
         }
         session.resetMissingAssetRetries();
         session.markChunkStart();
+
 
         // Lazy load audio_marker role index
         if (audioMarkerRoleIndex == Integer.MIN_VALUE) {
