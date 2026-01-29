@@ -4,7 +4,9 @@ import com.hypixel.hytale.component.AddReason;
 import com.hypixel.hytale.component.ComponentAccessor;
 import com.hypixel.hytale.component.Holder;
 import com.hypixel.hytale.component.Ref;
+import com.hypixel.hytale.component.RemoveReason;
 import com.hypixel.hytale.component.Store;
+import com.hypixel.hytale.component.query.Query;
 import com.hypixel.hytale.math.vector.Vector3i;
 import com.hypixel.hytale.math.vector.Vector3d;
 import com.hypixel.hytale.math.vector.Vector3f;
@@ -452,6 +454,27 @@ public class MediaPlaybackManager {
                 session.getProgress(),
                 session.getCurrentPositionMs(),
                 session.getTotalDurationMs());
+    }
+
+    public void cleanupMarkerNpcsInWorld(World world) {
+        if (world == null) {
+            return;
+        }
+        Store<EntityStore> store = world.getEntityStore().getStore();
+        store.forEachEntityParallel(
+                NPCEntity.getComponentType(),
+                (index, archetypeChunk, commandBuffer) -> {
+                    NPCEntity npc = archetypeChunk.getComponent(index, NPCEntity.getComponentType());
+                    if (npc == null) {
+                        return;
+                    }
+                    String roleName = npc.getRoleName();
+                    boolean nameMatches = roleName != null
+                            && roleName.toLowerCase().contains("audio_marker");
+                    if (nameMatches) {
+                        commandBuffer.removeEntity(archetypeChunk.getReferenceTo(index), RemoveReason.REMOVE);
+                    }
+                });
     }
 
     /**

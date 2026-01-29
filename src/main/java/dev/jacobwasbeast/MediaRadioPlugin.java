@@ -4,6 +4,9 @@ import com.hypixel.hytale.server.core.plugin.JavaPlugin;
 import com.hypixel.hytale.server.core.plugin.JavaPluginInit;
 import com.hypixel.hytale.server.core.modules.interaction.interaction.config.server.OpenCustomUIInteraction;
 import com.hypixel.hytale.server.core.Message;
+import com.hypixel.hytale.server.core.asset.LoadAssetEvent;
+import com.hypixel.hytale.server.core.universe.Universe;
+import com.hypixel.hytale.server.core.HytaleServer;
 import dev.jacobwasbeast.manager.MediaManager;
 import dev.jacobwasbeast.ui.RadioConfigSupplier;
 import dev.jacobwasbeast.config.MediaRadioConfig;
@@ -11,6 +14,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.logging.Level;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nonnull;
 
 public class MediaRadioPlugin extends JavaPlugin {
@@ -19,6 +25,8 @@ public class MediaRadioPlugin extends JavaPlugin {
     private dev.jacobwasbeast.manager.MediaLibrary mediaLibrary;
     private dev.jacobwasbeast.manager.MediaPlaybackManager playbackManager;
     private dev.jacobwasbeast.config.MediaRadioConfig config;
+    private volatile boolean markerCleanupDone = false;
+    private ScheduledFuture<?> markerCleanupTask;
 
     public MediaRadioPlugin(@Nonnull JavaPluginInit init) {
         super(init);
@@ -62,6 +70,14 @@ public class MediaRadioPlugin extends JavaPlugin {
         // Initialize MediaPlaybackManager
         this.playbackManager = new dev.jacobwasbeast.manager.MediaPlaybackManager(this);
         this.getLogger().at(Level.INFO).log("PlaybackManager initialized.");
+
+        this.getEventRegistry().register(LoadAssetEvent.class, event -> {
+            Universe.get().getWorlds().values().forEach(world -> world.execute(() -> {
+                if (playbackManager != null) {
+                    playbackManager.cleanupMarkerNpcsInWorld(world);
+                }
+            }));
+        });
 
         if (this.mediaManager != null && this.mediaLibrary != null) {
             this.mediaManager.warmThumbnails(this.mediaLibrary);
@@ -126,6 +142,10 @@ public class MediaRadioPlugin extends JavaPlugin {
                     if (mediaManager == null) {
                         return;
                     }
+                    if (!markerCleanupDone && playbackManager != null) {
+                        markerCleanupDone = true;
+                        scheduleMarkerCleanupRetries();
+                    }
                     boolean ytDlpAvailable = mediaManager.isYtDlpAvailable();
                     boolean ffmpegAvailable = mediaManager.isFfmpegAvailable();
                     if (ytDlpAvailable && ffmpegAvailable) {
@@ -157,6 +177,30 @@ public class MediaRadioPlugin extends JavaPlugin {
 
     public static MediaRadioPlugin getInstance() {
         return instance;
+    }
+
+    private void scheduleMarkerCleanupRetries() {
+        if (markerCleanupTask != null) {
+            markerCleanupTask.cancel(false);
+        }
+        AtomicInteger attempts = new AtomicInteger(0);
+        markerCleanupTask = HytaleServer.SCHEDULED_EXECUTOR.scheduleAtFixedRate(() -> {
+            if (playbackManager == null) {
+                return;
+            }
+            Universe.get().getWorlds().values().forEach(world -> world.execute(() -> {
+                if (playbackManager != null) {
+                    playbackManager.cleanupMarkerNpcsInWorld(world);
+                }
+            }));
+            if (attempts.incrementAndGet() >= 10) {
+                ScheduledFuture<?> task = markerCleanupTask;
+                markerCleanupTask = null;
+                if (task != null) {
+                    task.cancel(false);
+                }
+            }
+        }, 0, 1, TimeUnit.SECONDS);
     }
 
     public MediaManager getMediaManager() {
