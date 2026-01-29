@@ -291,15 +291,27 @@ public class MediaManager {
             throw new RuntimeException("yt-dlp not available for media download. Run /setup_radio.", e);
         }
 
+        StringBuilder output = new StringBuilder();
         // Read output to log
-        try (java.util.Scanner s = new java.util.Scanner(process.getInputStream()).useDelimiter("\\A")) {
-            while (s.hasNext()) {
-                plugin.getLogger().at(Level.INFO).log("[yt-dlp] %s", s.next());
+        try (java.util.Scanner s = new java.util.Scanner(process.getInputStream())) {
+            while (s.hasNextLine()) {
+                String line = s.nextLine();
+                output.append(line).append('\n');
+                plugin.getLogger().at(Level.INFO).log("[yt-dlp] %s", line);
             }
         }
 
         int exitCode = process.waitFor();
         if (exitCode != 0) {
+            String combined = output.toString();
+            if (combined.contains("ERROR: unable to download video data: HTTP Error 403: Forbidden")) {
+                throw new RuntimeException(
+                        "Unable to download video (HTTP 403). This error could happen for a variety of reasons: "
+                                + "#1 yt-dlp is out of date "
+                                + "#2 This song cannot be downloaded, try another one "
+                                + "#3 YouTube has banned your IP. "
+                                + "Try Rick Astley - Never Gonna Give You Up (confirmed to work).");
+            }
             throw new RuntimeException("yt-dlp exited with code " + exitCode);
         }
 
