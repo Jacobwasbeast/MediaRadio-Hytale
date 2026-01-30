@@ -16,6 +16,7 @@ import com.hypixel.hytale.server.core.asset.type.model.config.ModelAsset;
 import com.hypixel.hytale.server.core.asset.type.soundevent.config.SoundEvent;
 import dev.jacobwasbeast.MediaRadioPlugin;
 import dev.jacobwasbeast.util.VolumeUtil;
+import dev.jacobwasbeast.util.EmbeddedTools;
 
 import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
@@ -50,6 +51,7 @@ public class MediaManager {
 
     private final MediaRadioPlugin plugin;
     private final Path runtimeAssetsPath;
+    private final EmbeddedTools mediaTools;
     private final Path commonAudioPath;
     private final Path serverSoundEventsPath;
     private final Path thumbnailPath;
@@ -65,6 +67,7 @@ public class MediaManager {
     public MediaManager(MediaRadioPlugin plugin) {
         this.plugin = plugin;
         Path baseDir = MediaRadioPlugin.resolveRuntimeBasePath();
+        this.mediaTools = EmbeddedTools.create(baseDir.resolve("media_radio_tools"));
         this.runtimeAssetsPath = baseDir.resolve(RUNTIME_ASSETS_DIR).toAbsolutePath();
         this.storagePath = baseDir.resolve(STORAGE_DIR).toAbsolutePath();
         this.songsIndexFile = storagePath.resolve("song_index.json");
@@ -218,38 +221,75 @@ public class MediaManager {
         command.add(requireYtDlpCommand());
         command.add("--dump-json");
         command.add("--no-playlist");
+        command.add("--no-progress");
+        command.add("--quiet");
         java.util.List<String> extraArgs = getYtDlpMetadataArgs();
         if (!extraArgs.isEmpty()) {
             command.addAll(extraArgs);
         }
         command.add(url);
         ProcessBuilder pb = new ProcessBuilder(command);
+        pb.redirectErrorStream(true);
 
         Process process;
         try {
             process = pb.start();
         } catch (IOException e) {
-            throw new RuntimeException("yt-dlp not available for metadata fetch. Run /setup_radio.", e);
+            throw new RuntimeException("yt-dlp not available for metadata fetch. Embedded yt-dlp failed to execute.", e);
         }
         StringBuilder jsonOutput = new StringBuilder();
         try (java.util.Scanner s = new java.util.Scanner(process.getInputStream())) {
             while (s.hasNextLine()) {
-                jsonOutput.append(s.nextLine());
+                jsonOutput.append(s.nextLine()).append('\n');
             }
         }
 
         int exitCode = process.waitFor();
         if (exitCode != 0) {
+            String combined = jsonOutput.toString();
+            if (combined.contains("HTTP Error 403") || combined.contains("403: Forbidden")
+                    || combined.contains("ERROR: Unable to download JSON metadata: HTTP Error 403")) {
+                throw new RuntimeException(
+                        "yt-dlp received HTTP 403 (Forbidden). This can be caused by the specific URL, region/IP blocks, "
+                                + "or the embedded yt-dlp being outdated. Try another URL to confirm. If it only fails on "
+                                + "one song, the source is likely blocked. Otherwise update MediaRadio/media-tools or wait "
+                                + "for an update. Report the URL and logs if it persists.");
+            }
             throw new RuntimeException("yt-dlp metadata fetch failed code " + exitCode);
         }
 
-        JsonObject root = com.google.gson.JsonParser.parseString(jsonOutput.toString()).getAsJsonObject();
+        String raw = jsonOutput.toString();
+        String extracted = extractJsonObject(raw);
+        com.google.gson.stream.JsonReader reader = new com.google.gson.stream.JsonReader(
+                new java.io.StringReader(extracted));
+        reader.setLenient(true);
+        JsonObject root;
+        try {
+            root = com.google.gson.JsonParser.parseReader(reader).getAsJsonObject();
+        } catch (Exception e) {
+            String preview = raw.length() > 4000 ? raw.substring(0, 4000) + "...(truncated)" : raw;
+            plugin.getLogger().at(Level.WARNING).withCause(e)
+                    .log("yt-dlp metadata JSON parse failed. Raw output (truncated): %s", preview);
+            throw e;
+        }
         String title = root.has("title") ? root.get("title").getAsString() : "Unknown Title";
         String uploader = root.has("uploader") ? root.get("uploader").getAsString() : "Unknown Artist";
         String thumbnail = root.has("thumbnail") ? root.get("thumbnail").getAsString() : "";
         long duration = root.has("duration") ? root.get("duration").getAsLong() : 0;
 
         return new MediaInfo(trackId, url, title, uploader, thumbnail, duration, 0, "");
+    }
+
+    private String extractJsonObject(String raw) {
+        if (raw == null) {
+            return "{}";
+        }
+        int start = raw.indexOf('{');
+        int end = raw.lastIndexOf('}');
+        if (start >= 0 && end > start) {
+            return raw.substring(start, end + 1).trim();
+        }
+        return raw.trim();
     }
 
     private void downloadMedia(String url, String trackId) throws Exception {
@@ -269,15 +309,10 @@ public class MediaManager {
         command.add("--audio-quality");
         command.add("0");
 
-        String ffmpegCmd = resolveFfmpegCommand();
-        if (ffmpegCmd != null && !ffmpegCmd.equals("ffmpeg")) {
-            // If it's a path to the executable, we need to pass the directory
-            Path ffmpegPath = Paths.get(ffmpegCmd);
-            if (Files.isRegularFile(ffmpegPath)) {
-                // Pass the directory containing ffmpeg/ffprobe
-                command.add("--ffmpeg-location");
-                command.add(ffmpegPath.getParent().toString());
-            }
+        Path ffmpegLocation = mediaTools.getFfmpegLocationForYtDlp();
+        if (ffmpegLocation != null) {
+            command.add("--ffmpeg-location");
+            command.add(ffmpegLocation.toString());
         }
 
         command.add("-o");
@@ -297,7 +332,7 @@ public class MediaManager {
         try {
             process = pb.start();
         } catch (IOException e) {
-            throw new RuntimeException("yt-dlp not available for media download. Run /setup_radio.", e);
+            throw new RuntimeException("yt-dlp not available for media download. Embedded yt-dlp failed to execute.", e);
         }
 
         StringBuilder output = new StringBuilder();
@@ -313,13 +348,12 @@ public class MediaManager {
         int exitCode = process.waitFor();
         if (exitCode != 0) {
             String combined = output.toString();
-            if (combined.contains("ERROR: unable to download video data: HTTP Error 403: Forbidden")) {
+            if (combined.contains("HTTP Error 403") || combined.contains("403: Forbidden")) {
                 throw new RuntimeException(
-                        "Unable to download video (HTTP 403). This error could happen for a variety of reasons: "
-                                + "#1 yt-dlp is out of date "
-                                + "#2 This song cannot be downloaded, try another one "
-                                + "#3 YouTube has banned your IP. "
-                                + "Try Rick Astley - Never Gonna Give You Up (confirmed to work).");
+                        "yt-dlp received HTTP 403 (Forbidden). This can be caused by the specific URL, region/IP blocks, "
+                                + "or the embedded yt-dlp being outdated. Try another URL to confirm. If it only fails on "
+                                + "one song, the source is likely blocked. Otherwise update MediaRadio/media-tools or wait "
+                                + "for an update. Report the URL and logs if it persists.");
             }
             throw new RuntimeException("yt-dlp exited with code " + exitCode);
         }
@@ -338,11 +372,7 @@ public class MediaManager {
         plugin.getLogger().at(Level.INFO).log("Splitting audio %s into %.1fms chunks...", trackId,
                 segmentDuration * 1000.0);
 
-        String ffmpegCommand = resolveFfmpegCommand();
-        if (ffmpegCommand == null) {
-            throw new RuntimeException(
-                    "ffmpeg not available. Run /setup_radio and place it at " + getExpectedFfmpegPath());
-        }
+        String ffmpegCommand = requireFfmpegCommand();
 
         ProcessBuilder pb = new ProcessBuilder(
                 ffmpegCommand,
@@ -362,7 +392,7 @@ public class MediaManager {
         try {
             process = pb.start();
         } catch (IOException e) {
-            throw new RuntimeException("ffmpeg not available for audio split. Is it installed and on PATH?", e);
+            throw new RuntimeException("ffmpeg not available for audio split. Embedded ffmpeg failed to execute.", e);
         }
 
         // Read output
@@ -1229,18 +1259,25 @@ public class MediaManager {
                 process = pb.start();
             } catch (IOException e) {
                 plugin.getLogger().at(Level.WARNING).withCause(e)
-                        .log("yt-dlp not available for thumbnail download. Run /setup_radio.");
+                        .log("yt-dlp not available for thumbnail download. Embedded yt-dlp failed to execute.");
                 return "";
             }
 
+            String output = "";
             try (java.util.Scanner s = new java.util.Scanner(process.getInputStream()).useDelimiter("\\A")) {
-                while (s.hasNext()) {
-                    s.next();
+                if (s.hasNext()) {
+                    output = s.next();
                 }
             }
 
             int exitCode = process.waitFor();
             if (exitCode != 0) {
+                if (output.contains("HTTP Error 403") || output.contains("403: Forbidden")) {
+                    plugin.getLogger().at(Level.WARNING).log(
+                            "yt-dlp thumbnail download failed (HTTP 403). This can be URL-specific or an IP/region block, "
+                                    + "or the embedded yt-dlp may be outdated. Try another URL, then update or report.");
+                    return "";
+                }
                 plugin.getLogger().at(Level.WARNING).log("yt-dlp thumbnail download failed code %d", exitCode);
                 return "";
             }
@@ -1387,61 +1424,21 @@ public class MediaManager {
 
     private void logExternalToolStatus() {
         logEnvironmentDiagnostics();
-        ensureYtDlpAvailable();
-        String ytDlpCommand = resolveYtDlpCommand();
-        if (ytDlpCommand != null) {
-            logToolStatus(ytDlpCommand, "--version");
-        } else {
-            plugin.getLogger().at(Level.WARNING).log("yt-dlp not found. Use /setup_radio for setup details.");
-        }
-        logToolStatus("ffmpeg", "-version");
+        mediaTools.logToolStatus(plugin.getLogger());
         if (isYtDlpAvailable() && isFfmpegAvailable()) {
             plugin.getLogger().at(Level.INFO).log("MediaRadio tools ready: yt-dlp + ffmpeg detected.");
+        } else if (!isYtDlpAvailable() && !isFfmpegAvailable()) {
+            plugin.getLogger().at(Level.WARNING).log(
+                    "MediaRadio tools missing: embedded yt-dlp and ffmpeg were not found for this platform.");
+        } else if (!isYtDlpAvailable()) {
+            plugin.getLogger().at(Level.WARNING).log(
+                    "MediaRadio tools missing: embedded yt-dlp was not found for this platform.");
+        } else {
+            plugin.getLogger().at(Level.WARNING).log(
+                    "MediaRadio tools missing: embedded ffmpeg was not found for this platform.");
         }
     }
 
-    private void logToolStatus(String tool, String versionArg) {
-        ProcessBuilder pb = new ProcessBuilder(tool, versionArg);
-        pb.redirectErrorStream(true);
-        try {
-            Process process = pb.start();
-            String firstLine = "";
-            try (java.util.Scanner s = new java.util.Scanner(process.getInputStream())) {
-                if (s.hasNextLine()) {
-                    firstLine = s.nextLine();
-                }
-            }
-            int exitCode = process.waitFor();
-            if (exitCode == 0) {
-                plugin.getLogger().at(Level.INFO).log("%s available: %s", tool, firstLine.isEmpty() ? "ok" : firstLine);
-            } else {
-                plugin.getLogger().at(Level.WARNING).log("%s returned exit %d (%s)", tool, exitCode,
-                        firstLine.isEmpty() ? "no output" : firstLine);
-            }
-        } catch (IOException e) {
-            plugin.getLogger().at(Level.WARNING).withCause(e).log(
-                    "Couldn't find %s on PATH. Did you add it to your system PATH? PATH=%s", tool, getPathEnv());
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            plugin.getLogger().at(Level.WARNING).withCause(e).log("Interrupted while checking %s", tool);
-        }
-    }
-
-    private void ensureYtDlpAvailable() {
-        resolveYtDlpCommand();
-    }
-
-    private boolean isToolAvailable(String tool, String versionArg) {
-        ProcessBuilder pb = new ProcessBuilder(tool, versionArg);
-        pb.redirectErrorStream(true);
-        try {
-            Process process = pb.start();
-            process.waitFor();
-            return process.exitValue() == 0;
-        } catch (Exception e) {
-            return false;
-        }
-    }
 
     private java.util.List<String> getYtDlpArgs() {
         if (plugin.getConfig() == null) {
@@ -1460,77 +1457,43 @@ public class MediaManager {
     }
 
     private String requireYtDlpCommand() {
-        String resolved = resolveYtDlpCommand();
-        if (resolved == null || resolved.isEmpty()) {
-            throw new RuntimeException(
-                    "yt-dlp not available. Run /setup_radio and place it at " + getExpectedYtDlpPath());
-        }
-        return resolved;
+        return mediaTools.requireYtDlpCommand();
+    }
+
+    private String requireFfmpegCommand() {
+        return mediaTools.requireFfmpegCommand();
     }
 
     private String resolveYtDlpCommand() {
-        if (isToolAvailable("yt-dlp", "--version")) {
-            return "yt-dlp";
-        }
-        Path expected = getExpectedYtDlpPath();
-        if (Files.exists(expected)) {
-            return expected.toString();
-        }
-        return null;
+        return mediaTools.resolveYtDlpCommand();
     }
 
     public boolean isYtDlpAvailable() {
-        return resolveYtDlpCommand() != null;
+        return mediaTools.isYtDlpAvailable();
     }
 
     public Path getExpectedYtDlpPath() {
-        return runtimeAssetsPath.resolve("bin").resolve(resolveYtDlpAssetName());
+        return mediaTools.getExpectedYtDlpPath();
     }
 
     public boolean isFfmpegAvailable() {
-        return isToolAvailable("ffmpeg", "-version") || Files.exists(getExpectedFfmpegPath());
+        return mediaTools.isFfmpegAvailable();
     }
 
     public Path getExpectedFfmpegPath() {
-        return runtimeAssetsPath.resolve("bin").resolve(resolveFfmpegAssetName());
+        return mediaTools.getExpectedFfmpegPath();
     }
 
-    private String resolveYtDlpAssetName() {
-        if (isWindows()) {
-            return "yt-dlp.exe";
-        }
-        if (isMac()) {
-            return "yt-dlp_macos";
-        }
-        return "yt-dlp";
+    public boolean isToolProviderAvailable() {
+        return mediaTools.isPresent();
+    }
+
+    public String getToolStatusSummary() {
+        return mediaTools.getStatusSummary();
     }
 
     private String resolveFfmpegCommand() {
-        if (isToolAvailable("ffmpeg", "-version")) {
-            return "ffmpeg";
-        }
-        Path expected = getExpectedFfmpegPath();
-        if (Files.exists(expected)) {
-            return expected.toString();
-        }
-        return null;
-    }
-
-    private String resolveFfmpegAssetName() {
-        if (isWindows()) {
-            return "ffmpeg.exe";
-        }
-        return "ffmpeg";
-    }
-
-    private boolean isWindows() {
-        String os = System.getProperty("os.name", "").toLowerCase();
-        return os.contains("win");
-    }
-
-    private boolean isMac() {
-        String os = System.getProperty("os.name", "").toLowerCase();
-        return os.contains("mac");
+        return mediaTools.resolveFfmpegCommand();
     }
 
     private void logEnvironmentDiagnostics() {

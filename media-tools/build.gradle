@@ -1,0 +1,367 @@
+plugins {
+    id 'java-library'
+}
+
+import groovy.json.JsonSlurper
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(java_version)
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    def hytaleHome = rootProject.ext.hytaleHome
+    def patchline = rootProject.ext.patchline
+    implementation(files("$hytaleHome/install/$patchline/package/game/latest/Server/HytaleServer.jar"))
+}
+
+def registerPlatformJar = { String taskName, String os, String arch ->
+    tasks.register(taskName, Jar) {
+        group = 'distribution'
+        description = "Builds media-tools jar bundled with ${os}/${arch} embedded tools."
+        archiveBaseName = 'media-tools'
+        archiveClassifier = "${os}-${arch}"
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+        dependsOn tasks.named('classes')
+        dependsOn tasks.named('verifyBinaries')
+
+        from(sourceSets.main.output.classesDirs)
+        from(sourceSets.main.output.resourcesDir) {
+            include "manifest.json"
+            include "tools/${os}/${arch}/**"
+        }
+    }
+}
+
+registerPlatformJar('packageWindowsX86_64', 'windows', 'x86_64')
+registerPlatformJar('packageWindowsArm64', 'windows', 'arm64')
+registerPlatformJar('packageMacosX86_64', 'macos', 'x86_64')
+registerPlatformJar('packageMacosArm64', 'macos', 'arm64')
+registerPlatformJar('packageLinuxX86_64', 'linux', 'x86_64')
+registerPlatformJar('packageLinuxArm64', 'linux', 'arm64')
+
+tasks.register('packageCurseforge') {
+    group = 'distribution'
+    description = 'Build all OS/arch MediaRadio jars for CurseForge.'
+    dependsOn(
+            'packageWindowsX86_64',
+            'packageWindowsArm64',
+            'packageMacosX86_64',
+            'packageMacosArm64',
+            'packageLinuxX86_64',
+            'packageLinuxArm64'
+    )
+}
+
+tasks.register('downloadEmbeddedTools') {
+    group = 'media-tools'
+    description = 'Downloads latest yt-dlp and ffmpeg binaries into media-tools resources.'
+    doLast {
+        def toolsRoot = file('src/main/resources/tools')
+        def tmpRoot = file("$buildDir/tmp/embedded-tools")
+        tmpRoot.mkdirs()
+
+        def jsonSlurper = new JsonSlurper()
+
+        def readUrl = { String url ->
+            def conn = new URL(url).openConnection()
+            conn.setRequestProperty('User-Agent', 'MediaRadio-EmbeddedTools')
+            conn.setConnectTimeout(30000)
+            conn.setReadTimeout(30000)
+            conn.getInputStream().getText('UTF-8')
+        }
+
+        def downloadFile = { String url, File dest ->
+            dest.parentFile.mkdirs()
+            def conn = new URL(url).openConnection()
+            conn.setRequestProperty('User-Agent', 'MediaRadio-EmbeddedTools')
+            conn.setConnectTimeout(30000)
+            conn.setReadTimeout(30000)
+            if (conn instanceof HttpURLConnection) {
+                int code = conn.responseCode
+                if (code == 403) {
+                    throw new GradleException("Download failed (403 Forbidden): ${url} - access denied or rate-limited. Try again later or use a mirror.")
+                } else if (code == 404) {
+                    throw new GradleException("Download failed (404 Not Found): ${url} - asset missing for this platform.")
+                } else if (code >= 400) {
+                    throw new GradleException("Download failed (HTTP ${code}): ${url}")
+                }
+            }
+            conn.getInputStream().withCloseable { input ->
+                dest.withOutputStream { out ->
+                    out << input
+                }
+            }
+        }
+
+        def urlExists = { String url ->
+            try {
+                def conn = new URL(url).openConnection()
+                conn.setRequestProperty('User-Agent', 'MediaRadio-EmbeddedTools')
+                conn.setConnectTimeout(15000)
+                conn.setReadTimeout(15000)
+                conn.setRequestMethod('HEAD')
+                conn.connect()
+                return conn.responseCode >= 200 && conn.responseCode < 300
+            } catch (Exception ignored) {
+                return false
+            }
+        }
+
+        def sha256 = { File file ->
+            def digest = java.security.MessageDigest.getInstance('SHA-256')
+            file.withInputStream { stream ->
+                byte[] buffer = new byte[8192]
+                int read
+                while ((read = stream.read(buffer)) > 0) {
+                    digest.update(buffer, 0, read)
+                }
+            }
+            return digest.digest().encodeHex().toString()
+        }
+
+        def verifySha256 = { File file, String expected ->
+            if (!expected) {
+                return true
+            }
+            def actual = sha256(file)
+            if (!actual.equalsIgnoreCase(expected)) {
+                throw new GradleException("SHA256 mismatch for ${file.name}: expected ${expected}, got ${actual}")
+            }
+            return true
+        }
+
+        def unzipSingle = { File zipFile, String suffix, File outFile ->
+            def zip = new java.util.zip.ZipFile(zipFile)
+            try {
+                def entry = zip.entries().find { it.name.endsWith(suffix) && !it.isDirectory() }
+                if (entry == null && suffix.startsWith('/')) {
+                    def alt = suffix.substring(1)
+                    entry = zip.entries().find { it.name.endsWith(alt) && !it.isDirectory() }
+                }
+                if (entry == null && suffix == '/ffmpeg') {
+                    entry = zip.entries().find {
+                        (it.name.endsWith('/ffmpeg/ffmpeg') || it.name.endsWith('\\ffmpeg\\ffmpeg')) && !it.isDirectory()
+                    }
+                }
+                if (entry == null) {
+                    throw new GradleException("Missing ${suffix} in ${zipFile.name}")
+                }
+                outFile.parentFile.mkdirs()
+                zip.getInputStream(entry).withCloseable { input ->
+                    outFile.withOutputStream { out ->
+                        out << input
+                    }
+                }
+            } finally {
+                zip.close()
+            }
+            if (!org.gradle.internal.os.OperatingSystem.current().isWindows()) {
+                outFile.setExecutable(true, true)
+            }
+        }
+
+        def unzipAll = { File zipFile, File destDir ->
+            def tmpDir = new File(tmpRoot, "zip-${System.nanoTime()}")
+            tmpDir.mkdirs()
+            project.copy {
+                from zipTree(zipFile)
+                into tmpDir
+            }
+            def children = tmpDir.listFiles()
+            File rootDir = tmpDir
+            if (children != null) {
+                def dirs = children.findAll { it.isDirectory() }
+                def files = children.findAll { it.isFile() }
+                if (dirs.size() == 1 && files.isEmpty()) {
+                    rootDir = dirs[0]
+                }
+            }
+            if (destDir.exists()) {
+                destDir.deleteDir()
+            }
+            project.copy {
+                from rootDir
+                into destDir
+            }
+        }
+
+        def pruneWindowsFfmpeg = { File destDir ->
+            def docDir = new File(destDir, 'doc')
+            if (docDir.exists()) {
+                docDir.deleteDir()
+            }
+            def presetsDir = new File(destDir, 'presets')
+            if (presetsDir.exists()) {
+                presetsDir.deleteDir()
+            }
+        }
+
+        println "Downloading latest yt-dlp release..."
+        def ytRelease = jsonSlurper.parseText(readUrl('https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest'))
+        def ytAssets = ytRelease.assets.collectEntries { [(it.name): it.browser_download_url] }
+        def ytChecksumsUrl = ytAssets['SHA2-256SUMS']
+        def ytChecksums = [:]
+        if (ytChecksumsUrl != null) {
+            readUrl(ytChecksumsUrl).eachLine { line ->
+                def parts = line.trim().split(/\s+/, 2)
+                if (parts.length == 2) {
+                    ytChecksums[parts[1]] = parts[0]
+                }
+            }
+        }
+
+        def ytTargets = [
+                [name: 'yt-dlp.exe', path: 'windows/x86_64/yt-dlp.exe'],
+                [name: 'yt-dlp_arm64.exe', path: 'windows/arm64/yt-dlp_arm64.exe'],
+                [name: 'yt-dlp', path: 'linux/x86_64/yt-dlp_linux'],
+                [name: 'yt-dlp_linux_aarch64', path: 'linux/arm64/yt-dlp_linux_aarch64'],
+                [name: 'yt-dlp_macos', path: 'macos/x86_64/yt-dlp_macos'],
+                [name: 'yt-dlp_macos', path: 'macos/arm64/yt-dlp_macos']
+        ]
+
+        ytTargets.each { target ->
+            def url = ytAssets[target.name]
+            if (url == null) {
+                println "Skipping ${target.name} (asset not found)"
+                return
+            }
+            def outFile = new File(toolsRoot, target.path)
+            def tmpFile = new File(tmpRoot, target.name)
+            downloadFile(url, tmpFile)
+            verifySha256(tmpFile, ytChecksums[target.name])
+            outFile.parentFile.mkdirs()
+            outFile.bytes = tmpFile.bytes
+            if (!org.gradle.internal.os.OperatingSystem.current().isWindows()) {
+                outFile.setExecutable(true, true)
+            }
+            println "Saved ${target.name} -> ${outFile}"
+        }
+
+        println "Downloading latest ffmpeg builds..."
+        def ffmpegUrls = [
+                [url: 'https://ffmpeg.martin-riedl.de/redirect/latest/macos/amd64/snapshot/ffmpeg.zip', out: 'macos/x86_64/ffmpeg', suffix: '/ffmpeg'],
+                [url: 'https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/snapshot/ffmpeg.zip', out: 'macos/arm64/ffmpeg', suffix: '/ffmpeg'],
+                [url: 'https://ffmpeg.martin-riedl.de/redirect/latest/linux/amd64/snapshot/ffmpeg.zip', out: 'linux/x86_64/ffmpeg', suffix: '/ffmpeg'],
+                [url: 'https://ffmpeg.martin-riedl.de/redirect/latest/linux/arm64/snapshot/ffmpeg.zip', out: 'linux/arm64/ffmpeg', suffix: '/ffmpeg']
+        ]
+
+        ffmpegUrls.eachWithIndex { entry, idx ->
+            def zipFile = new File(tmpRoot, "ffmpeg-riedl-${idx}.zip")
+            downloadFile(entry.url, zipFile)
+            def destDir = new File(toolsRoot, entry.out)
+            unzipAll(zipFile, destDir)
+            println "Extracted ${entry.url} -> ${entry.out}"
+        }
+
+        def btbnChecksumsUrl = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/checksums.sha256'
+        def btbnChecksums = [:]
+        readUrl(btbnChecksumsUrl).eachLine { line ->
+            def parts = line.trim().split(/\s+/, 2)
+            if (parts.length == 2) {
+                btbnChecksums[parts[1]] = parts[0]
+            }
+        }
+
+        def win64 = [name: 'ffmpeg-master-latest-win64-lgpl.zip',
+                url: 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl.zip']
+        def winarm64 = [name: 'ffmpeg-master-latest-winarm64-lgpl.zip',
+                url: 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-winarm64-lgpl.zip']
+
+        def extractBtbn = { def asset, String outRel ->
+            if (!urlExists(asset.url)) {
+                println "Skipping ${outRel} (missing ${asset.name})"
+                return
+            }
+            def zipFile = new File(tmpRoot, asset.name)
+            downloadFile(asset.url, zipFile)
+            def expected = btbnChecksums[asset.name]
+            if (expected != null) {
+                verifySha256(zipFile, expected)
+            }
+            def destDir = new File(toolsRoot, outRel)
+            unzipAll(zipFile, destDir)
+            pruneWindowsFfmpeg(destDir)
+            println "Extracted ${asset.name} -> ${outRel}"
+        }
+
+        extractBtbn(win64, 'windows/x86_64/ffmpeg')
+        extractBtbn(winarm64, 'windows/arm64/ffmpeg')
+
+        println "Embedded tools download complete."
+    }
+}
+
+tasks.named('build') {
+    dependsOn 'verifyBinaries'
+}
+
+tasks.named('assemble') {
+    dependsOn 'verifyBinaries'
+}
+
+tasks.register('verifyBinaries') {
+    group = 'media-tools'
+    description = 'Checks embedded binaries exist and look valid without downloading.'
+    doLast {
+        def toolsRoot = file('src/main/resources/tools')
+        def expectedFiles = [
+                'windows/x86_64/yt-dlp.exe',
+                'windows/arm64/yt-dlp_arm64.exe',
+                'macos/x86_64/yt-dlp_macos',
+                'macos/arm64/yt-dlp_macos',
+                'linux/x86_64/yt-dlp_linux',
+                'linux/arm64/yt-dlp_linux_aarch64'
+        ]
+
+        def expectedDirs = [
+                'windows/x86_64/ffmpeg',
+                'windows/arm64/ffmpeg',
+                'macos/x86_64/ffmpeg',
+                'macos/arm64/ffmpeg',
+                'linux/x86_64/ffmpeg',
+                'linux/arm64/ffmpeg'
+        ]
+
+        def warn = { String msg -> println "WARN: ${msg}" }
+
+        expectedFiles.each { rel ->
+            def fileObj = new File(toolsRoot, rel)
+            if (!fileObj.exists()) {
+                warn("Missing binary: ${rel}")
+                return
+            }
+            if (fileObj.length() == 0L) {
+                warn("Empty binary: ${rel}")
+            }
+            if (!org.gradle.internal.os.OperatingSystem.current().isWindows()
+                    && rel.endsWith('.exe') == false
+                    && !fileObj.canExecute()) {
+                warn("Binary not executable: ${rel}")
+            }
+        }
+
+        expectedDirs.each { rel ->
+            def dirObj = new File(toolsRoot, rel)
+            if (!dirObj.exists() || !dirObj.isDirectory()) {
+                warn("Missing ffmpeg bundle: ${rel}")
+                return
+            }
+            def binExe = new File(dirObj, 'bin/ffmpeg.exe')
+            def binUnix = new File(dirObj, 'bin/ffmpeg')
+            def nestedBinExe = new File(dirObj, 'ffmpeg/bin/ffmpeg.exe')
+            def nestedBinUnix = new File(dirObj, 'ffmpeg/bin/ffmpeg')
+            def rootExe = new File(dirObj, 'ffmpeg.exe')
+            def rootUnix = new File(dirObj, 'ffmpeg')
+            if (!binExe.exists() && !binUnix.exists()
+                    && !nestedBinExe.exists() && !nestedBinUnix.exists()
+                    && !rootExe.exists() && !rootUnix.exists()) {
+                warn("Missing ffmpeg binary in bundle: ${rel}")
+            }
+        }
+    }
+}

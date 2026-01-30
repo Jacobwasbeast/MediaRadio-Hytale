@@ -1,0 +1,17 @@
+{
+  "Group": "Jacobwasbeast",
+  "Name": "media_tools",
+  "Version": "1.0.0",
+  "Description": "Embedded media tool binaries for MediaRadio.",
+  "Authors": [
+    {
+      "Name": "Jacobwasbeast"
+    }
+  ],
+  "ServerVersion": "*",
+  "Dependencies": {},
+  "OptionalDependencies": {},
+  "DisabledByDefault": false,
+  "Main": "dev.jacobwasbeast.mediatools.MediaToolsPlugin",
+  "IncludesAssetPack": false
+}
