@@ -16,6 +16,7 @@ import com.hypixel.hytale.server.core.ui.builder.UICommandBuilder;
 import com.hypixel.hytale.server.core.ui.builder.UIEventBuilder;
 import com.hypixel.hytale.math.vector.Vector3i;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
+import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import dev.jacobwasbeast.MediaRadioPlugin;
 import com.hypixel.hytale.server.core.Message;
@@ -834,30 +835,16 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
             return playerRef.getUuid().toString();
         }
         String worldId = "world";
-        if (store != null && store.getExternalData() != null && store.getExternalData().getWorld() != null) {
-            Object world = store.getExternalData().getWorld();
-            String resolved = tryInvokeString(world, "getId");
-            if (resolved == null) {
-                resolved = tryInvokeString(world, "getUuid");
-            }
-            if (resolved == null) {
-                resolved = tryInvokeString(world, "getName");
-            }
-            if (resolved != null && !resolved.isEmpty()) {
-                worldId = resolved;
+        if (store != null && store.getExternalData() != null) {
+            World world = store.getExternalData().getWorld();
+            if (world != null) {
+                String name = world.getName();
+                if (name != null && !name.isEmpty()) {
+                    worldId = name;
+                }
             }
         }
         return "boombox:" + worldId + ":" + blockPos.getX() + "," + blockPos.getY() + "," + blockPos.getZ();
-    }
-
-    private String tryInvokeString(Object target, String methodName) {
-        try {
-            java.lang.reflect.Method method = target.getClass().getMethod(methodName);
-            Object result = method.invoke(target);
-            return result != null ? result.toString() : null;
-        } catch (ReflectiveOperationException ignored) {
-            return null;
-        }
     }
 
     private float parseVolumePercent(String text) {
