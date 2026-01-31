@@ -4,7 +4,7 @@ import com.hypixel.hytale.server.core.entity.entities.Player;
 import com.hypixel.hytale.server.core.inventory.ItemStack;
 
 public final class RadioItemUtil {
-    public static final String RADIO_ITEM_ID = "media_radio:radio";
+    public static final String PORTABLE_RADIO_ITEM_ID = "media_radio:radio";
 
     private RadioItemUtil() {
     }
@@ -17,7 +17,9 @@ public final class RadioItemUtil {
         if (itemId == null || itemId.isEmpty()) {
             return false;
         }
-        return RADIO_ITEM_ID.equals(itemId) || "radio".equals(itemId) || itemId.endsWith(":radio");
+        return PORTABLE_RADIO_ITEM_ID.equals(itemId)
+                || "radio".equals(itemId)
+                || itemId.endsWith(":radio");
     }
 
     public static boolean isRadioHeld(Player player) {

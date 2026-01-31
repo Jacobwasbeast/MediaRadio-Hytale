@@ -1,8 +1,0 @@
-{
-    "Name": "media_radio:radio",
-    "Components": [
-        {
-            "Type": "media_radio:radio"
-        }
-    ]
-}
