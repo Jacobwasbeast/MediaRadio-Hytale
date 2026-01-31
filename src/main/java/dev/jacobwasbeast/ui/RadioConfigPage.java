@@ -38,6 +38,7 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
     private static final long VOLUME_COOLDOWN_MS = 5000;
     private static final Map<UUID, Long> LAST_VOLUME_CHANGE_MS = new ConcurrentHashMap<>();
     private static final Map<UUID, Boolean> VOLUME_EDITING = new ConcurrentHashMap<>();
+    private static final Map<UUID, Boolean> BOOMBOX_UI_OPEN = new ConcurrentHashMap<>();
     private static final int VOLUME_STEP_PERCENT = 10;
     private static final int VOLUME_DEFAULT_PERCENT = VolumeUtil.DEFAULT_PERCENT;
 
@@ -58,6 +59,9 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
     public void build(@Nonnull Ref<EntityStore> ref, @Nonnull UICommandBuilder commandBuilder,
             @Nonnull UIEventBuilder eventBuilder, @Nonnull Store<EntityStore> store) {
         commandBuilder.append("Pages/MediaRadio/RadioConfig.ui");
+        if (blockPos != null) {
+            BOOMBOX_UI_OPEN.put(playerRef.getUuid(), true);
+        }
 
         // Populate Now Playing
         PlaybackSession session = resolveSession();
@@ -206,7 +210,7 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                     boolean enabled = !manager.isLoopEnabled(playerRef.getUuid());
                     manager.setLoopEnabled(playerRef.getUuid(), enabled);
                 }
-                reopenPageIfNeeded(ref, store, player);
+                refreshUiAfterAction(ref, store, player);
             });
             return;
         } else if ("Remove".equals(data.action)) {
@@ -236,7 +240,7 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                         manager.stop(playerRef, store);
                     }
                 }
-                reopenPageIfNeeded(ref, store, player);
+                refreshUiAfterAction(ref, store, player);
             });
             return;
         } else if ("Pause".equals(data.action)) {
@@ -258,7 +262,7 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                             manager.pauseByUser(playerRef);
                         }
                     }
-                    reopenPageIfNeeded(ref, store, player);
+                    refreshUiAfterAction(ref, store, player);
                 }
             });
             return;
@@ -287,7 +291,7 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                     }
                 }
                 player.sendMessage(Message.translation("Stopped playback."));
-                reopenPageIfNeeded(ref, store, player);
+                refreshUiAfterAction(ref, store, player);
             });
             return;
         }
@@ -409,7 +413,7 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                 library.upsertSongStatus(getLibraryOwnerId(store), finalUrl, "Downloading...", null, null, null,
                         0, null,
                         null);
-                reopenPageIfNeeded(ref, store, player);
+                refreshUiAfterAction(ref, store, player);
             }
             player.sendMessage(Message.translation("Requesting media..."));
 
@@ -445,7 +449,7 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                                                 mediaInfo.trackId,
                                                 mediaInfo.thumbnailAssetPath);
                                     }
-                                    reopenPageIfNeeded(ref, store, player);
+                                    refreshUiAfterAction(ref, store, player);
                                 }))
                                 .exceptionally(ex -> {
                                     store.getExternalData().getWorld().execute(() -> {
@@ -485,7 +489,7 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                                                 mediaInfo.trackId,
                                                 mediaInfo.thumbnailAssetPath);
                                     }
-                                    reopenPageIfNeeded(ref, store, player);
+                                    refreshUiAfterAction(ref, store, player);
                                 }))
                                 .exceptionally(ex -> {
                                     store.getExternalData().getWorld().execute(() -> {
@@ -562,6 +566,7 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
     @Override
     public void onDismiss(@Nonnull Ref<EntityStore> ref, @Nonnull Store<EntityStore> store) {
         stopTimeUpdater();
+        BOOMBOX_UI_OPEN.remove(playerRef.getUuid());
     }
 
     private String formatTime(long ms) {
@@ -803,6 +808,24 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
         }
         if (player != null) {
             player.getPageManager().openCustomPage(ref, store, new RadioConfigPage(playerRef, blockPos));
+        }
+    }
+
+    private void refreshBoomboxIfOpen(Ref<EntityStore> ref, Store<EntityStore> store, Player player) {
+        if (blockPos == null || player == null) {
+            return;
+        }
+        if (!Boolean.TRUE.equals(BOOMBOX_UI_OPEN.get(playerRef.getUuid()))) {
+            return;
+        }
+        player.getPageManager().openCustomPage(ref, store, new RadioConfigPage(playerRef, blockPos));
+    }
+
+    private void refreshUiAfterAction(Ref<EntityStore> ref, Store<EntityStore> store, Player player) {
+        if (blockPos != null) {
+            refreshBoomboxIfOpen(ref, store, player);
+        } else {
+            reopenPageIfNeeded(ref, store, player);
         }
     }
 
