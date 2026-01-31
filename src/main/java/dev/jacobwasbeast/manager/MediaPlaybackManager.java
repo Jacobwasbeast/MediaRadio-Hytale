@@ -92,6 +92,7 @@ public class MediaPlaybackManager {
         // Create new session
         PlaybackSession session = new PlaybackSession(trackId, blockPos, totalChunks, chunkDurationMs);
         activeBlockSessions.put(key, session);
+        attachBlockEntityRef(session, store, blockPos);
 
         // Start playback
         session.play();
@@ -133,6 +134,7 @@ public class MediaPlaybackManager {
                 mediaInfo.url,
                 mediaInfo.duration * 1000L);
         activeBlockSessions.put(key, session);
+        attachBlockEntityRef(session, store, blockPos);
 
         session.play();
         session.setVolume(getVolume(blockPos, store));
@@ -502,6 +504,12 @@ public class MediaPlaybackManager {
         if (!session.isPlaying()) {
             return;
         }
+        if (!session.isPlayerBound() && !isBlockPlaybackValid(session)) {
+            session.stop();
+            removeSession(session);
+            handleSessionEnded(session, store);
+            return;
+        }
 
         String trackId = session.getTrackId();
         String chunkTrackId = session.getCurrentChunkTrackId();
@@ -709,6 +717,27 @@ public class MediaPlaybackManager {
             return false;
         }
         return RadioItemUtil.isRadioHeld(player);
+    }
+
+    private void attachBlockEntityRef(PlaybackSession session, Store<EntityStore> store, Vector3i blockPos) {
+        if (session == null || blockPos == null || store == null) {
+            return;
+        }
+        World world = store.getExternalData().getWorld();
+        if (world == null) {
+            return;
+        }
+        ChunkStore chunkStore = world.getChunkStore();
+        Ref<ChunkStore> blockRef = getOrCreateBlockEntityRef(chunkStore, blockPos);
+        session.setBlockEntityRef(blockRef);
+    }
+
+    private boolean isBlockPlaybackValid(PlaybackSession session) {
+        Ref<ChunkStore> blockRef = session.getBlockEntityRef();
+        if (blockRef == null) {
+            return true;
+        }
+        return blockRef.isValid();
     }
 
     private void removeSession(PlaybackSession session) {

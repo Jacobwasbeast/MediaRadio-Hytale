@@ -62,14 +62,14 @@
         "ItemId": "boombox"
       }
     },
+    "Flags": {
+      "IsUsable": true
+    },
     "Interactions": {
       "Use": {
         "Interactions": [
           {
-            "Type": "OpenCustomUI",
-            "Page": {
-              "Id": "MediaRadio_Config"
-            }
+            "Type": "Simple"
           }
         ]
       }
@@ -78,7 +78,8 @@
   "PlayerAnimationsId": "Block",
   "ItemSoundSetId": "ISS_Blocks_Stone",
   "Interactions": {
-    "Primary": "Block_Primary"
+    "Primary": "Block_Primary",
+    "Secondary": "Block_Secondary"
   },
   "Tags": {
     "Type": ["Block"]
