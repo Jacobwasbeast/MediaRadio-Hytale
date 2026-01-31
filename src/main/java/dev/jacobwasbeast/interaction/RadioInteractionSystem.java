@@ -22,7 +22,11 @@ public class RadioInteractionSystem extends EntityEventSystem<EntityStore, UseBl
             @Nonnull Store<EntityStore> store, @Nonnull CommandBuffer<EntityStore> commandBuffer,
             @Nonnull UseBlockEvent.Pre event) {
         String blockId = event.getBlockType().getId();
-        if (!"media_radio:radio".equals(blockId)) {
+        if (blockId == null) {
+            return;
+        }
+        if (!"media_radio:boombox".equals(blockId) && !"boombox".equals(blockId)
+                && !blockId.endsWith(":boombox")) {
             return;
         }
 

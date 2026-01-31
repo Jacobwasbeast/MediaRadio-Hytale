@@ -1,0 +1,98 @@
+{
+  "duration": 60,
+  "holdLastKeyframe": false,
+  "nodeAnimations": {
+    "R-Arm": {
+      "position": [],
+      "orientation": [
+        {
+          "time": 15,
+          "delta": {
+            "x": -0.135752,
+            "y": 0.021104,
+            "z": -0.029274,
+            "w": 0.990085
+          },
+          "interpolationType": "smooth"
+        },
+        {
+          "time": 45,
+          "delta": {
+            "x": -0.04991,
+            "y": 0.032453,
+            "z": -0.036837,
+            "w": 0.997546
+          },
+          "interpolationType": "smooth"
+        }
+      ],
+      "shapeStretch": [],
+      "shapeVisible": [],
+      "shapeUvOffset": []
+    },
+    "R-Attachment": {
+      "position": [
+        {
+          "time": 15,
+          "delta": {
+            "x": 2.0,
+            "y": -3.5,
+            "z": 1.2
+          },
+          "interpolationType": "smooth"
+        }
+      ],
+      "orientation": [],
+      "shapeStretch": [],
+      "shapeVisible": [],
+      "shapeUvOffset": []
+    },
+    "R-Forearm": {
+      "position": [],
+      "orientation": [
+        {
+          "time": 15,
+          "delta": {
+            "x": -0.5,
+            "y": 0,
+            "z": 0,
+            "w": 0.866025
+          },
+          "interpolationType": "smooth"
+        },
+        {
+          "time": 45,
+          "delta": {
+            "x": -0.5373,
+            "y": 0,
+            "z": 0,
+            "w": 0.843391
+          },
+          "interpolationType": "smooth"
+        }
+      ],
+      "shapeStretch": [],
+      "shapeVisible": [],
+      "shapeUvOffset": []
+    },
+    "R-Hand": {
+      "position": [],
+      "orientation": [
+        {
+          "time": 15,
+          "delta": {
+            "x": 0,
+            "y": 0,
+            "z": 0.043619,
+            "w": 0.999048
+          },
+          "interpolationType": "smooth"
+        }
+      ],
+      "shapeStretch": [],
+      "shapeVisible": [],
+      "shapeUvOffset": []
+    }
+  },
+  "formatVersion": 1
+}

@@ -1,0 +1,8 @@
+{
+  "Name": "media_radio:boombox",
+  "Components": [
+    {
+      "Type": "media_radio:radio"
+    }
+  ]
+}

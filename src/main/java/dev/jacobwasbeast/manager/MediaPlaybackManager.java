@@ -44,6 +44,7 @@ public class MediaPlaybackManager {
     private final Map<String, PlaybackSession> activeBlockSessions = new ConcurrentHashMap<>();
     private final Map<UUID, PlaybackSession> activePlayerSessions = new ConcurrentHashMap<>();
     private final Map<UUID, Boolean> loopPreferences = new ConcurrentHashMap<>();
+    private final Map<UUID, Float> playerVolumePreferences = new ConcurrentHashMap<>();
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
     private static final int MAX_MISSING_ASSET_RETRIES = 40;
     private static final long MISSING_ASSET_RETRY_DELAY_MS = 500;
@@ -91,6 +92,7 @@ public class MediaPlaybackManager {
         // Create new session
         PlaybackSession session = new PlaybackSession(trackId, blockPos, totalChunks, chunkDurationMs);
         activeBlockSessions.put(key, session);
+        attachBlockEntityRef(session, store, blockPos);
 
         // Start playback
         session.play();
@@ -132,6 +134,7 @@ public class MediaPlaybackManager {
                 mediaInfo.url,
                 mediaInfo.duration * 1000L);
         activeBlockSessions.put(key, session);
+        attachBlockEntityRef(session, store, blockPos);
 
         session.play();
         session.setVolume(getVolume(blockPos, store));
@@ -171,6 +174,7 @@ public class MediaPlaybackManager {
                 mediaInfo.url,
                 mediaInfo.duration * 1000L);
         session.setLoopEnabled(loopPreferences.getOrDefault(playerId, false));
+        session.setVolume(getPlayerVolume(playerId));
         activePlayerSessions.put(playerId, session);
 
         session.play();
@@ -400,6 +404,21 @@ public class MediaPlaybackManager {
         return getVolume(pos, store);
     }
 
+    public float getPlayerVolume(UUID playerId) {
+        if (playerId == null) {
+            return VolumeUtil.percentToEventDb(VolumeUtil.DEFAULT_PERCENT);
+        }
+        return playerVolumePreferences.getOrDefault(playerId,
+                VolumeUtil.percentToEventDb(VolumeUtil.DEFAULT_PERCENT));
+    }
+
+    public void setPlayerVolume(UUID playerId, float volumeDb) {
+        if (playerId == null) {
+            return;
+        }
+        playerVolumePreferences.put(playerId, volumeDb);
+    }
+
     private Ref<ChunkStore> getOrCreateBlockEntityRef(ChunkStore chunkStore, Vector3i pos) {
         if (chunkStore == null || pos == null) {
             return null;
@@ -483,6 +502,12 @@ public class MediaPlaybackManager {
 
     private void playCurrentChunk(PlaybackSession session, Store<EntityStore> store) {
         if (!session.isPlaying()) {
+            return;
+        }
+        if (!session.isPlayerBound() && !isBlockPlaybackValid(session)) {
+            session.stop();
+            removeSession(session);
+            handleSessionEnded(session, store);
             return;
         }
 
@@ -692,6 +717,27 @@ public class MediaPlaybackManager {
             return false;
         }
         return RadioItemUtil.isRadioHeld(player);
+    }
+
+    private void attachBlockEntityRef(PlaybackSession session, Store<EntityStore> store, Vector3i blockPos) {
+        if (session == null || blockPos == null || store == null) {
+            return;
+        }
+        World world = store.getExternalData().getWorld();
+        if (world == null) {
+            return;
+        }
+        ChunkStore chunkStore = world.getChunkStore();
+        Ref<ChunkStore> blockRef = getOrCreateBlockEntityRef(chunkStore, blockPos);
+        session.setBlockEntityRef(blockRef);
+    }
+
+    private boolean isBlockPlaybackValid(PlaybackSession session) {
+        Ref<ChunkStore> blockRef = session.getBlockEntityRef();
+        if (blockRef == null) {
+            return true;
+        }
+        return blockRef.isValid();
     }
 
     private void removeSession(PlaybackSession session) {

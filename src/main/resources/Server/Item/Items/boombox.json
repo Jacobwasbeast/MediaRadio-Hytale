@@ -1,0 +1,87 @@
+{
+  "TranslationProperties": {
+    "Name": "mediaRadio.boombox.name",
+    "Description": "mediaRadio.boombox.description"
+  },
+  "InteractionConfig": {
+    "Priorities": {
+      "Secondary": {
+        "MainHand": 1
+      }
+    }
+  },
+  "IconProperties": {
+    "Scale": 0.4,
+    "Translation": [-25, -25],
+    "Rotation": [315, 270, 0]
+  },
+  "Category": "Blocks",
+  "ItemLevel": 1,
+  "MaxStack": 1,
+  "Icon": "Icons/ItemsGenerated/BoomBox.png",
+  "Recipe": {
+    "TimeSeconds": 5,
+    "Input": [
+      {
+        "ItemId": "Ingredient_Bar_Iron",
+        "Quantity": 15
+      },
+      {
+        "ItemId": "Ingredient_Bar_Copper",
+        "Quantity": 25
+      },
+      {
+        "ResourceTypeId": "Rubble",
+        "Quantity": 5
+      }
+    ],
+    "BenchRequirement": [
+      {
+        "Type": "Crafting",
+        "Id": "Furniture_Bench",
+        "Categories": ["Furniture_Misc"]
+      }
+    ]
+  },
+  "BlockType": {
+    "Material": "Solid",
+    "DrawType": "Cube",
+    "Textures": [
+      {
+        "All": "Blocks/MediaRadio/Radio.png",
+        "Weight": 1
+      }
+    ],
+    "ParticleColor": "#737055",
+    "BlockSoundSetId": "Stone",
+    "BlockBreakingDecalId": "Breaking_Decals_Wood",
+    "BlockParticleSetId": "Stone",
+    "Gathering": {
+      "Breaking": {
+        "GatherType": "Rocks",
+        "ItemId": "boombox"
+      }
+    },
+    "Flags": {
+      "IsUsable": true
+    },
+    "Interactions": {
+      "Use": {
+        "Interactions": [
+          {
+            "Type": "Simple"
+          }
+        ]
+      }
+    }
+  },
+  "PlayerAnimationsId": "Block",
+  "ItemSoundSetId": "ISS_Blocks_Stone",
+  "Interactions": {
+    "Primary": "Block_Primary",
+    "Secondary": "Block_Secondary"
+  },
+  "Tags": {
+    "Type": ["Block"]
+  }
+}

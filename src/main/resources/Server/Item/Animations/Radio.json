@@ -1,0 +1,43 @@
+{
+  "Animations": {
+    "Idle": {
+      "FirstPerson": "Characters/Animations/Items/Off_Handed/Radio/Idle_FPS.blockyanim",
+      "Speed": 0.5,
+      "ThirdPerson": "Characters/Animations/Items/Off_Handed/Radio/Idle.blockyanim",
+      "Looping": true
+    }
+  },
+  "Camera": {
+    "Pitch": {
+      "AngleRange": {
+        "Max": 60,
+        "Min": -60
+      },
+      "TargetNodes": [
+        "Head",
+        "LShoulder"
+      ]
+    },
+    "Yaw": {
+      "AngleRange": {
+        "Max": 45,
+        "Min": -45
+      },
+      "TargetNodes": [
+        "Head"
+      ]
+    }
+  },
+  "WiggleWeights": {
+    "Pitch": 2,
+    "PitchDeceleration": 0.1,
+    "Roll": 0.1,
+    "RollDeceleration": 0.1,
+    "X": 3.5,
+    "XDeceleration": 0.05,
+    "Y": 0.1,
+    "YDeceleration": 0.1,
+    "Z": 0.1,
+    "ZDeceleration": 0.1
+  }
+}

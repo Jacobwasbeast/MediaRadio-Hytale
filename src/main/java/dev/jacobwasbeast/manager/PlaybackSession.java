@@ -6,6 +6,7 @@ import com.hypixel.hytale.math.vector.Vector3i;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
+import com.hypixel.hytale.server.core.universe.world.storage.ChunkStore;
 import dev.jacobwasbeast.util.VolumeUtil;
 import com.hypixel.hytale.server.npc.entities.NPCEntity;
 
@@ -30,6 +31,7 @@ public class PlaybackSession {
 
     private Ref<EntityStore> markerEntity;
     private NPCEntity npcEntity;
+    private Ref<ChunkStore> blockEntityRef;
 
     private int currentChunk = 0;
     private int missingAssetRetries = 0;
@@ -363,6 +365,14 @@ public class PlaybackSession {
 
     public void setMarkerEntity(Ref<EntityStore> markerEntity) {
         this.markerEntity = markerEntity;
+    }
+
+    public Ref<ChunkStore> getBlockEntityRef() {
+        return blockEntityRef;
+    }
+
+    public void setBlockEntityRef(Ref<ChunkStore> blockEntityRef) {
+        this.blockEntityRef = blockEntityRef;
     }
 
     public NPCEntity getNPCEntity() {

@@ -1,7 +1,7 @@
 {
   "TranslationProperties": {
-    "Name": "mediaRadio.radio.name",
-    "Description": "mediaRadio.radio.description"
+    "Name": "mediaRadio.portableRadio.name",
+    "Description": "mediaRadio.portableRadio.description"
   },
   "InteractionConfig": {
     "Priorities": {
@@ -12,13 +12,22 @@
     }
   },
   "IconProperties": {
-    "Scale": 0.4,
-    "Translation": [-25, -25],
-    "Rotation": [315, 270, 0]
+    "Rotation": [
+      22.5,
+      45,
+      22.5
+    ],
+    "Scale": 0.45,
+    "Translation": [
+      3,
+      -15.6
+    ]
   },
-  "Category": "Blocks",
+  "Category": "Tools",
   "ItemLevel": 1,
   "MaxStack": 1,
+  "Model": "Items/Tools/Radio/Radio.blockymodel",
+  "Texture": "Items/Tools/Radio/Radio.png",
   "Icon": "Icons/ItemsGenerated/Radio.png",
   "Recipe": {
     "TimeSeconds": 5,
@@ -44,35 +53,12 @@
       }
     ]
   },
-  "BlockType": {
-    "Material": "Solid",
-    "DrawType": "Cube",
-    "Textures": [
-      {
-        "All": "Blocks/MediaRadio/Radio.png",
-        "Weight": 1
-      }
-    ],
-    "ParticleColor": "#737055",
-    "BlockSoundSetId": "Wood",
-    "BlockBreakingDecalId": "Breaking_Decals_Wood",
-    "BlockParticleSetId": "Wood",
-    "Gathering": {
-      "Breaking": {
-        "GatherType": "Block"
-      }
-    },
-    "Flags": {
-      "IsUsable": true
-    }
-  },
   "Utility": {
     "Usable": true
   },
-  "PlayerAnimationsId": "Item",
+  "PlayerAnimationsId": "Radio",
   "ItemSoundSetId": "ISS_Blocks_Wood",
   "Interactions": {
-    "Primary": "Block_Primary",
     "Secondary": {
       "Interactions": [
         {
@@ -83,8 +69,5 @@
         }
       ]
     }
-  },
-  "Tags": {
-    "Type": ["Block"]
   }
 }
