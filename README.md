@@ -1,14 +1,17 @@
 # MediaRadio-Hytale
-MediaRadio is a Hytale mod that lets players stream web audio through a handheld radio item.
-Music only plays while the radio is held (main hand or offhand), and the UI provides a media-player
-style interface with play/pause/stop, seek, looping, and a per-player library.
+MediaRadio is a Hytale mod that lets players stream web audio through a Portable Radio (handheld)
+or a placeable Boombox. Music only plays while the Portable Radio is held (main hand or offhand),
+or while a Boombox is placed, and the UI provides a media-player style interface with
+play/pause/stop, seek, looping, and a per-player library.
 
 ## Features
 - Plays web audio from supported URLs (YouTube, etc.) using embedded yt-dlp + ffmpeg.
-- Audio is downloaded, converted to OGG, and chunked for streaming.
+- Audio is downloaded, converted to OGG, and chunked for streaming (with reduced streaming lag).
+- Portable Radio (handheld) and Boombox (placeable) items.
 - Per-player libraries: each player only sees the songs they requested.
 - Thumbnails are downloaded and registered as dynamic assets.
-- Playback pauses automatically when the radio is not held.
+- Playback pauses automatically when the Portable Radio is not held.
+- Portable Radio includes a proper model and animation set.
 
 ## Notes
 - Embedded tools live in the `media-tools` subproject and are loaded from the classpath.
@@ -18,18 +21,18 @@ style interface with play/pause/stop, seek, looping, and a per-player library.
 
 ## Recipe
 - Crafted at a Furniture Bench (Furniture Misc).
-- Costs 15 Iron Bars, 25 Copper Bars, and 5 Rubble.
+- Portable Radio and Boombox both cost 15 Iron Bars, 25 Copper Bars, and 5 Rubble.
 
 ## Screenshots
-![Radio in main hand](Screenshots/MainHand.png)
-![Radio in offhand](Screenshots/OffHand.png)
+![Portable Radio held](Screenshots/RadioHeld.png)
+![Boombox placed](Screenshots/BoomboxPlaced.png)
 ![Media radio UI](Screenshots/UI.png)
 
 ## Setup (Prebuilt)
 1. Download the latest MediaRadio mod binaries.
 2. Copy the mod binary (and the `media-tools` binary if shipped separately) into your Hytale server `mods` folder.
 3. Start the server and join a world.
-4. Give yourself the radio item and open the UI to start playback.
+4. Give yourself the Portable Radio or Boombox and open the UI to start playback.
 
 ## Build (From Source)
 1. Add platform binaries to `media-tools/src/main/resources/tools/<os>/<arch>/`:
@@ -44,4 +47,4 @@ style interface with play/pause/stop, seek, looping, and a per-player library.
 4. Find the built mod binaries in `build/` and `media-tools/build/`.
 5. Copy the built mod binaries into your Hytale server `mods` folder.
 6. Start the server and join a world.
-7. Give yourself the radio item and open the UI to start playback.
+7. Give yourself the Portable Radio or Boombox and open the UI to start playback.
