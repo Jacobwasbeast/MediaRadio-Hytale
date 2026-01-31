@@ -108,6 +108,14 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                             VolumeUtil.clampPercent(
                                     VolumeUtil.eventDbToPercent(playbackManager.getBlockVolume(blockPos, store))));
                 }
+            } else {
+                var playbackManager = MediaRadioPlugin.getInstance().getPlaybackManager();
+                if (playbackManager != null) {
+                    volumePercent = Math.round(
+                            VolumeUtil.clampPercent(
+                                    VolumeUtil.eventDbToPercent(
+                                            playbackManager.getPlayerVolume(playerRef.getUuid()))));
+                }
             }
             if (!Boolean.TRUE.equals(VOLUME_EDITING.get(playerRef.getUuid()))) {
                 commandBuilder.set("#VolumeInput.Value", String.valueOf(volumePercent));
@@ -313,32 +321,41 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                     return;
                 }
                 PlaybackSession session = resolveSession();
+                float currentPercent;
+                var playbackManager = MediaRadioPlugin.getInstance().getPlaybackManager();
                 if (session != null) {
-                    LAST_VOLUME_CHANGE_MS.put(playerRef.getUuid(), now);
-                    float currentPercent = VolumeUtil.eventDbToPercent(session.getVolume());
-                    float nextPercent = currentPercent + (up ? VOLUME_STEP_PERCENT : -VOLUME_STEP_PERCENT);
-                    float nextClamped = VolumeUtil.clampPercent(nextPercent);
-                    float volDb = VolumeUtil.percentToEventDb(nextClamped);
-                    session.setVolume(volDb);
+                    currentPercent = VolumeUtil.eventDbToPercent(session.getVolume());
+                } else if (blockPos != null && playbackManager != null) {
+                    currentPercent = VolumeUtil.eventDbToPercent(playbackManager.getBlockVolume(blockPos, store));
+                } else if (playbackManager != null) {
+                    currentPercent = VolumeUtil.eventDbToPercent(playbackManager.getPlayerVolume(playerRef.getUuid()));
+                } else {
+                    currentPercent = VOLUME_DEFAULT_PERCENT;
+                }
+                LAST_VOLUME_CHANGE_MS.put(playerRef.getUuid(), now);
+                float nextPercent = currentPercent + (up ? VOLUME_STEP_PERCENT : -VOLUME_STEP_PERCENT);
+                float nextClamped = VolumeUtil.clampPercent(nextPercent);
+                float volDb = VolumeUtil.percentToEventDb(nextClamped);
 
+                if (session != null) {
+                    session.setVolume(volDb);
                     // Replace SoundEvent configs for all chunks with new volume
                     var mediaManager = MediaRadioPlugin.getInstance().getMediaManager();
                     if (session.getTrackId() != null) {
                         mediaManager.updateTrackVolume(session.getTrackId(), session.getTotalChunks(), volDb);
                     }
-                    if (blockPos != null) {
-                        var playbackManager = MediaRadioPlugin.getInstance().getPlaybackManager();
-                        if (playbackManager != null) {
-                            playbackManager.updateComponent(blockPos, store, component -> component.setVolume(volDb));
-                        }
-                    }
-
-                    UICommandBuilder blockCommandBuilder = new UICommandBuilder();
-                    blockCommandBuilder.set("#VolumeInput.Value", String.valueOf(Math.round(nextClamped)));
-                    UIEventBuilder blockEventBuilder = new UIEventBuilder();
-                    addEventBindings(blockEventBuilder);
-                    sendUpdate(blockCommandBuilder, blockEventBuilder, false);
                 }
+                if (blockPos != null && playbackManager != null) {
+                    playbackManager.updateComponent(blockPos, store, component -> component.setVolume(volDb));
+                } else if (playbackManager != null) {
+                    playbackManager.setPlayerVolume(playerRef.getUuid(), volDb);
+                }
+
+                UICommandBuilder blockCommandBuilder = new UICommandBuilder();
+                blockCommandBuilder.set("#VolumeInput.Value", String.valueOf(Math.round(nextClamped)));
+                UIEventBuilder blockEventBuilder = new UIEventBuilder();
+                addEventBindings(blockEventBuilder);
+                sendUpdate(blockCommandBuilder, blockEventBuilder, false);
             });
             return;
         }
@@ -350,30 +367,29 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
             if (percentValue >= 0.0f) {
                 store.getExternalData().getWorld().execute(() -> {
                     PlaybackSession session = resolveSession();
+                    LAST_VOLUME_CHANGE_MS.put(playerRef.getUuid(), System.currentTimeMillis());
+                    float nextClamped = VolumeUtil.clampPercent(percentValue);
+                    float volDb = VolumeUtil.percentToEventDb(nextClamped);
                     if (session != null) {
-                        LAST_VOLUME_CHANGE_MS.put(playerRef.getUuid(), System.currentTimeMillis());
-                        float nextClamped = VolumeUtil.clampPercent(percentValue);
-                        float volDb = VolumeUtil.percentToEventDb(nextClamped);
                         session.setVolume(volDb);
-
                         // Replace SoundEvent configs for all chunks with new volume
                         var mediaManager = MediaRadioPlugin.getInstance().getMediaManager();
                         if (session.getTrackId() != null) {
                             mediaManager.updateTrackVolume(session.getTrackId(), session.getTotalChunks(), volDb);
                         }
-                        if (blockPos != null) {
-                            var playbackManager = MediaRadioPlugin.getInstance().getPlaybackManager();
-                            if (playbackManager != null) {
-                                playbackManager.updateComponent(blockPos, store, component -> component.setVolume(volDb));
-                            }
-                        }
-
-                        UICommandBuilder blockCommandBuilder = new UICommandBuilder();
-                        blockCommandBuilder.set("#VolumeInput.Value", String.valueOf(Math.round(nextClamped)));
-                        UIEventBuilder blockEventBuilder = new UIEventBuilder();
-                        addEventBindings(blockEventBuilder);
-                        sendUpdate(blockCommandBuilder, blockEventBuilder, false);
                     }
+                    var playbackManager = MediaRadioPlugin.getInstance().getPlaybackManager();
+                    if (blockPos != null && playbackManager != null) {
+                        playbackManager.updateComponent(blockPos, store, component -> component.setVolume(volDb));
+                    } else if (playbackManager != null) {
+                        playbackManager.setPlayerVolume(playerRef.getUuid(), volDb);
+                    }
+
+                    UICommandBuilder blockCommandBuilder = new UICommandBuilder();
+                    blockCommandBuilder.set("#VolumeInput.Value", String.valueOf(Math.round(nextClamped)));
+                    UIEventBuilder blockEventBuilder = new UIEventBuilder();
+                    addEventBindings(blockEventBuilder);
+                    sendUpdate(blockCommandBuilder, blockEventBuilder, false);
                 });
             }
             return;
@@ -640,6 +656,14 @@ public class RadioConfigPage extends InteractiveCustomUIPage<RadioConfigPage.Rad
                     volumePercent = Math.round(
                             VolumeUtil.clampPercent(
                                     VolumeUtil.eventDbToPercent(playbackManager.getBlockVolume(blockPos, store))));
+                }
+            } else {
+                var playbackManager = MediaRadioPlugin.getInstance().getPlaybackManager();
+                if (playbackManager != null) {
+                    volumePercent = Math.round(
+                            VolumeUtil.clampPercent(
+                                    VolumeUtil.eventDbToPercent(
+                                            playbackManager.getPlayerVolume(playerRef.getUuid()))));
                 }
             }
             if (!Boolean.TRUE.equals(VOLUME_EDITING.get(playerRef.getUuid()))) {

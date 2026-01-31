@@ -104,7 +104,7 @@ $C.@Container {
                     Anchor: (Top: 6, Height: 14);
 
                     Label #VolumeHint {
-                        Text: "Max 500%";
+                        Text: "Max 200%";
                         Style: LabelStyle(
                             TextColor: #6f8297,
                             FontSize: 11

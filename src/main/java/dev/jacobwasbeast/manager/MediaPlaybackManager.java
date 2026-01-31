@@ -44,6 +44,7 @@ public class MediaPlaybackManager {
     private final Map<String, PlaybackSession> activeBlockSessions = new ConcurrentHashMap<>();
     private final Map<UUID, PlaybackSession> activePlayerSessions = new ConcurrentHashMap<>();
     private final Map<UUID, Boolean> loopPreferences = new ConcurrentHashMap<>();
+    private final Map<UUID, Float> playerVolumePreferences = new ConcurrentHashMap<>();
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
     private static final int MAX_MISSING_ASSET_RETRIES = 40;
     private static final long MISSING_ASSET_RETRY_DELAY_MS = 500;
@@ -171,6 +172,7 @@ public class MediaPlaybackManager {
                 mediaInfo.url,
                 mediaInfo.duration * 1000L);
         session.setLoopEnabled(loopPreferences.getOrDefault(playerId, false));
+        session.setVolume(getPlayerVolume(playerId));
         activePlayerSessions.put(playerId, session);
 
         session.play();
@@ -398,6 +400,21 @@ public class MediaPlaybackManager {
 
     public float getBlockVolume(Vector3i pos, Store<EntityStore> store) {
         return getVolume(pos, store);
+    }
+
+    public float getPlayerVolume(UUID playerId) {
+        if (playerId == null) {
+            return VolumeUtil.percentToEventDb(VolumeUtil.DEFAULT_PERCENT);
+        }
+        return playerVolumePreferences.getOrDefault(playerId,
+                VolumeUtil.percentToEventDb(VolumeUtil.DEFAULT_PERCENT));
+    }
+
+    public void setPlayerVolume(UUID playerId, float volumeDb) {
+        if (playerId == null) {
+            return;
+        }
+        playerVolumePreferences.put(playerId, volumeDb);
     }
 
     private Ref<ChunkStore> getOrCreateBlockEntityRef(ChunkStore chunkStore, Vector3i pos) {

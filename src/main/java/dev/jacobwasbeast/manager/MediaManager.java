@@ -561,7 +561,11 @@ public class MediaManager {
             return CompletableFuture.completedFuture(null);
         }
         CompletableFuture<Void> result = new CompletableFuture<>();
-        prepareRuntimeAssetsAsync(mediaInfo, 750, VolumeUtil.percentToEventDb(VolumeUtil.DEFAULT_PERCENT), true)
+        float volumeDb = VolumeUtil.percentToEventDb(VolumeUtil.DEFAULT_PERCENT);
+        if (plugin.getPlaybackManager() != null) {
+            volumeDb = plugin.getPlaybackManager().getPlayerVolume(playerRef.getUuid());
+        }
+        prepareRuntimeAssetsAsync(mediaInfo, 750, volumeDb, true)
                 .thenAccept(totalChunks -> {
             if (totalChunks <= 0) {
                 plugin.getLogger().at(Level.WARNING).log("No chunks available for %s", mediaInfo.trackId);

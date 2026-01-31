@@ -1,7 +1,7 @@
 package dev.jacobwasbeast.util;
 
 public final class VolumeUtil {
-    public static final int MAX_PERCENT = 500;
+    public static final int MAX_PERCENT = 200;
     public static final int DEFAULT_PERCENT = 100;
     public static final float EVENT_DB_MIN = -10.0f;
     public static final float EVENT_DB_MAX = 10.0f;
