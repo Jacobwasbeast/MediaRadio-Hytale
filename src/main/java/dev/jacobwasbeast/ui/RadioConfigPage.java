@@ -44,6 +44,7 @@ public final class RadioConfigPage {
     private static final int VOLUME_STEP_PERCENT = 10;
     private static final int VOLUME_DEFAULT_PERCENT = VolumeUtil.DEFAULT_PERCENT;
     private static final String DEFAULT_IMAGE = "MediaRadio/Icons/placeholder.png";
+    private static final String LOADING_IMAGE = "MediaRadio/Icons/loading.png";
 
     private static final Map<UUID, ActivePage> ACTIVE_PAGES = new ConcurrentHashMap<>();
     private static final Map<UUID, ScheduledFuture<?>> TIME_UPDATERS = new ConcurrentHashMap<>();
@@ -818,6 +819,7 @@ public final class RadioConfigPage {
         String pauseLabel = "Pause";
         String nowThumb = DEFAULT_IMAGE;
         String playPauseIcon = "MediaRadio/Icons/play.png";
+        boolean nowLoading = isNowLoading(queue, session, libraryByUrl, mediaManager);
         if (session != null && !session.isStopped()) {
             nowTitle = session.getTitle().isEmpty() ? "Unknown Title" : session.getTitle();
             nowArtist = session.getArtist();
@@ -838,6 +840,11 @@ public final class RadioConfigPage {
                     nowThumb = icon;
                 }
             }
+        }
+        if (nowLoading) {
+            nowTitle = "Loading...";
+            nowArtist = "";
+            nowThumb = LOADING_IMAGE;
         }
 
         int volumePercent = VOLUME_DEFAULT_PERCENT;
@@ -918,7 +925,7 @@ public final class RadioConfigPage {
                     view.artist = resolveItemArtist(item);
                     view.thumb = resolveItemIcon(item, mediaManager);
                 }
-                view.status = "";
+                view.status = resolveQueueStatus(queue, i, item.url, session, song, mediaManager);
                 if (view.thumb == null || view.thumb.isEmpty()) {
                     view.thumb = DEFAULT_IMAGE;
                 }
@@ -1086,6 +1093,10 @@ public final class RadioConfigPage {
             ACTIVE_PAGES.remove(playerRef.getUuid());
             return false;
         }
+        String selectedTab = SELECTED_TAB.getOrDefault(playerRef.getUuid(), "Now");
+        if (!"Now".equals(selectedTab)) {
+            return true;
+        }
 
         ScrubState scrubState = SCRUB_STATES.get(playerRef.getUuid());
         if (scrubState != null && scrubState.isScrubbing) {
@@ -1100,7 +1111,18 @@ public final class RadioConfigPage {
         PlaylistManager playlistManager = MediaRadioPlugin.getInstance().getPlaylistManager();
         PlaylistManager.QueueState queue = playlistManager != null ? playlistManager.getQueue(getScopeId(store)) : null;
 
-        if (session != null && !session.isStopped()) {
+        Map<String, dev.jacobwasbeast.manager.MediaLibrary.SavedSong> libraryByUrl =
+                buildLibraryIndex(MediaRadioPlugin.getInstance().getMediaLibrary(), getScopeId(store), mediaManager);
+        boolean nowLoading = isNowLoading(queue, session, libraryByUrl, mediaManager);
+        if (nowLoading) {
+            updateLabel(page, "now-title", loadingTitle());
+            updateLabel(page, "now-artist", "");
+            updateLabel(page, "now-time", "0:00 / 0:00");
+            updateSlider(page, "seek-slider", 0);
+            updateImage(page, "now-thumb", LOADING_IMAGE);
+            updateLabel(page, "loop-label", resolveLoopLabel(queue));
+            updateImage(page, "play-pause-icon", "MediaRadio/Icons/play.png");
+        } else if (session != null && !session.isStopped()) {
             updateLabel(page, "now-title", session.getTitle().isEmpty() ? "Unknown Title" : session.getTitle());
             updateLabel(page, "now-artist", session.getArtist());
             updateLabel(page, "now-time",
@@ -1144,6 +1166,7 @@ public final class RadioConfigPage {
             }
         }
 
+        updateQueueStatuses(page, store, queue, session, mediaManager);
         page.updatePage(false);
         return true;
     }
@@ -1417,6 +1440,100 @@ public final class RadioConfigPage {
         }
         String lower = value.toLowerCase(Locale.ROOT);
         return lower.startsWith("http://") || lower.startsWith("https://");
+    }
+
+    private String loadingTitle() {
+        long tick = System.currentTimeMillis() / 450;
+        int dots = (int) (tick % 3) + 1;
+        StringBuilder builder = new StringBuilder("Loading");
+        for (int i = 0; i < dots; i++) {
+            builder.append('.');
+        }
+        return builder.toString();
+    }
+
+    private boolean isNowLoading(PlaylistManager.QueueState queue,
+            PlaybackSession session,
+            Map<String, dev.jacobwasbeast.manager.MediaLibrary.SavedSong> libraryByUrl,
+            dev.jacobwasbeast.manager.MediaManager mediaManager) {
+        if (queue == null || queue.items == null || queue.items.isEmpty()) {
+            return false;
+        }
+        int index = queue.index;
+        if (index < 0 || index >= queue.items.size()) {
+            return false;
+        }
+        PlaylistManager.PlaylistItem item = queue.items.get(index);
+        dev.jacobwasbeast.manager.MediaLibrary.SavedSong song =
+                libraryByUrl != null ? libraryByUrl.get(normalizeUrl(mediaManager, item.url)) : null;
+        String status = resolveQueueStatus(queue, index, item.url, session, song, mediaManager);
+        return isLoadingStatus(status);
+    }
+
+    private boolean isLoadingStatus(String status) {
+        if (status == null || status.isEmpty()) {
+            return false;
+        }
+        String lower = status.toLowerCase(Locale.ROOT);
+        return lower.contains("loading") || lower.contains("downloading") || lower.contains("preparing");
+    }
+
+    private void updateQueueStatuses(HyUIPage page,
+            Store<EntityStore> store,
+            PlaylistManager.QueueState queue,
+            PlaybackSession session,
+            dev.jacobwasbeast.manager.MediaManager mediaManager) {
+        if (page == null || queue == null || queue.items == null) {
+            return;
+        }
+        String scopeId = getScopeId(store);
+        var library = MediaRadioPlugin.getInstance().getMediaLibrary();
+        Map<String, dev.jacobwasbeast.manager.MediaLibrary.SavedSong> libraryByUrl =
+                buildLibraryIndex(library, scopeId, mediaManager);
+        for (int i = 0; i < queue.items.size(); i++) {
+            PlaylistManager.PlaylistItem item = queue.items.get(i);
+            dev.jacobwasbeast.manager.MediaLibrary.SavedSong song =
+                    libraryByUrl != null ? libraryByUrl.get(normalizeUrl(mediaManager, item.url)) : null;
+            String status = resolveQueueStatus(queue, i, item.url, session, song, mediaManager);
+            updateLabel(page, "queue-status-" + i, status);
+        }
+    }
+
+    private String resolveQueueStatus(PlaylistManager.QueueState queue,
+            int index,
+            String itemUrl,
+            PlaybackSession session,
+            dev.jacobwasbeast.manager.MediaLibrary.SavedSong song,
+            dev.jacobwasbeast.manager.MediaManager mediaManager) {
+        if (queue != null && index == queue.index) {
+            if (session == null || session.isStopped()) {
+                if (song != null && isLoadingStatus(song.status)) {
+                    return song.status;
+                }
+                return "";
+            }
+            if (!urlsMatch(mediaManager, itemUrl, session.getUrl())) {
+                return "Loading...";
+            }
+            return session.isPaused() ? "Paused" : "Playing";
+        }
+        if (song != null && song.status != null && !song.status.isEmpty() && !"Ready".equalsIgnoreCase(song.status)) {
+            if ("Playing".equalsIgnoreCase(song.status) || "Paused".equalsIgnoreCase(song.status)) {
+                return "";
+            }
+            return song.status;
+        }
+        return "";
+    }
+
+    private boolean urlsMatch(dev.jacobwasbeast.manager.MediaManager mediaManager, String a, String b) {
+        if (a == null || b == null) {
+            return false;
+        }
+        if (mediaManager == null) {
+            return a.equals(b);
+        }
+        return mediaManager.normalizeUrl(a).equals(mediaManager.normalizeUrl(b));
     }
 
     private Map<String, dev.jacobwasbeast.manager.MediaLibrary.SavedSong> buildLibraryIndex(
@@ -1806,6 +1923,7 @@ public final class RadioConfigPage {
         private final String upId;
         private final String downId;
         private final String removeId;
+        private final String statusId;
 
         private QueueItemView(int index) {
             this.index = index;
@@ -1813,6 +1931,7 @@ public final class RadioConfigPage {
             this.upId = "queue-up-" + index;
             this.downId = "queue-down-" + index;
             this.removeId = "queue-remove-" + index;
+            this.statusId = "queue-status-" + index;
         }
     }
 
