@@ -68,6 +68,18 @@
         letter-spacing: 0;
         outline-color: rgba(0, 0, 0, 0.45);
     }
+    @mediabtnlabelcenter {
+        color: #dfe7f1;
+        font-size: 12;
+        font-weight: bold;
+        text-align: middlecenter;
+        vertical-align: center;
+        horizontal-align: center;
+        white-space: nowrap;
+        text-transform: none;
+        letter-spacing: 0;
+        outline-color: rgba(0, 0, 0, 0.45);
+    }
 </style>
 <div class="page-overlay">
     <div
@@ -135,13 +147,21 @@
                             data-hyui-flexweight="1"
                             style="padding: 2 0 0 12"
                         >
-                            <p id="now-title" class="label-title" style="font-size: 16">
+                            <p
+                                id="now-title"
+                                class="label-title"
+                                style="font-size: 16"
+                            >
                                 {{$nowTitle}}
                             </p>
                             <p id="now-artist" class="label-light">
                                 {{$nowArtist}}
                             </p>
-                            <p id="now-time" class="subtle" style="padding: 2 0 0 0">
+                            <p
+                                id="now-time"
+                                class="subtle"
+                                style="padding: 2 0 0 0"
+                            >
                                 {{$nowTime}}
                             </p>
                             <input
@@ -154,53 +174,91 @@
                                 style="anchor-width: 410; anchor-height: 6"
                             />
 
-                            <div class="row" style="padding: 8 0 0 0">
-                                <p class="subtle" style="anchor-width: 80">
-                                    {{$volumeLabel}}
-                                </p>
+                            <div
+                                class="row"
+                                style="padding: 8 0 0 0; anchor-width: 410"
+                            >
+                                <div class="column" style="anchor-width: 60">
+                                    <p class="subtle">{{$volumeLabel}}</p>
+                                    <p class="subtle" style="font-size: 11">
+                                        {{$volumeHint}}
+                                    </p>
+                                </div>
                                 <input
                                     id="volume-input"
                                     type="text"
                                     value="{{$volumeValue}}"
                                     placeholder="100"
-                                    style="anchor-width: 62; anchor-height: 20"
+                                    style="anchor-width: 50; anchor-height: 20"
                                 />
                                 <button
                                     id="volume-down"
-                                    class="small-secondary-button"
-                                    style="anchor-left: 4; anchor-width: 26"
+                                    class="custom-textbutton"
+                                    data-hyui-default-bg="@MediaBtnDefault"
+                                    data-hyui-hovered-bg="@MediaBtnHover"
+                                    data-hyui-pressed-bg="@MediaBtnPressed"
+                                    data-hyui-default-label-style="@mediabtnlabelcenter"
+                                    data-hyui-hovered-label-style="@mediabtnlabelcenter"
+                                    data-hyui-pressed-label-style="@mediabtnlabelcenter"
+                                    style="
+                                        anchor-left: 4;
+                                        anchor-width: 26;
+                                        anchor-height: 20;
+                                    "
                                 >
                                     -
                                 </button>
                                 <button
                                     id="volume-up"
-                                    class="small-secondary-button"
-                                    style="anchor-left: 4; anchor-width: 26"
+                                    class="custom-textbutton"
+                                    data-hyui-default-bg="@MediaBtnDefault"
+                                    data-hyui-hovered-bg="@MediaBtnHover"
+                                    data-hyui-pressed-bg="@MediaBtnPressed"
+                                    data-hyui-default-label-style="@mediabtnlabelcenter"
+                                    data-hyui-hovered-label-style="@mediabtnlabelcenter"
+                                    data-hyui-pressed-label-style="@mediabtnlabelcenter"
+                                    style="
+                                        anchor-left: 4;
+                                        anchor-width: 26;
+                                        anchor-height: 20;
+                                    "
                                 >
                                     +
                                 </button>
                             </div>
-                            <p class="subtle" style="font-size: 11">
-                                {{$volumeHint}}
-                            </p>
                         </div>
                     </div>
                 </div>
 
                 <div
                     class="controls-bar"
-                    style="layout-mode: Top; anchor-width: 600; anchor-height: 86"
+                    style="
+                        layout-mode: Top;
+                        anchor-width: 600;
+                        anchor-height: 86;
+                    "
                 >
-                    <div class="row" style="anchor-width: 584; anchor-height: 34">
+                    <div
+                        class="row"
+                        style="anchor-width: 584; anchor-height: 34"
+                    >
                         <button
                             id="prev-button"
                             class="custom-button"
                             data-hyui-default-bg="@MediaBtnDefault"
                             data-hyui-hovered-bg="@MediaBtnHover"
                             data-hyui-pressed-bg="@MediaBtnPressed"
-                            style="anchor-width: 52; anchor-height: 34; layout-mode: Center;"
+                            style="
+                                anchor-width: 52;
+                                anchor-height: 34;
+                                layout-mode: Center;
+                            "
                         >
-                            <img src="MediaRadio/Icons/prev.png" width="18" height="18" />
+                            <img
+                                src="MediaRadio/Icons/prev.png"
+                                width="18"
+                                height="18"
+                            />
                         </button>
                         <div style="anchor-width: 6"></div>
                         <button
@@ -209,9 +267,17 @@
                             data-hyui-default-bg="@MediaBtnDefault"
                             data-hyui-hovered-bg="@MediaBtnHover"
                             data-hyui-pressed-bg="@MediaBtnPressed"
-                            style="anchor-width: 52; anchor-height: 34; layout-mode: Center;"
+                            style="
+                                anchor-width: 52;
+                                anchor-height: 34;
+                                layout-mode: Center;
+                            "
                         >
-                            <img src="MediaRadio/Icons/play.png" width="18" height="18" />
+                            <img
+                                src="MediaRadio/Icons/play.png"
+                                width="18"
+                                height="18"
+                            />
                         </button>
                         <div style="anchor-width: 6"></div>
                         <button
@@ -220,9 +286,17 @@
                             data-hyui-default-bg="@MediaBtnDefault"
                             data-hyui-hovered-bg="@MediaBtnHover"
                             data-hyui-pressed-bg="@MediaBtnPressed"
-                            style="anchor-width: 52; anchor-height: 34; layout-mode: Center;"
+                            style="
+                                anchor-width: 52;
+                                anchor-height: 34;
+                                layout-mode: Center;
+                            "
                         >
-                            <img src="MediaRadio/Icons/pause.png" width="18" height="18" />
+                            <img
+                                src="MediaRadio/Icons/pause.png"
+                                width="18"
+                                height="18"
+                            />
                         </button>
                         <div style="anchor-width: 6"></div>
                         <button
@@ -231,9 +305,17 @@
                             data-hyui-default-bg="@MediaBtnDefault"
                             data-hyui-hovered-bg="@MediaBtnHover"
                             data-hyui-pressed-bg="@MediaBtnPressed"
-                            style="anchor-width: 52; anchor-height: 34; layout-mode: Center;"
+                            style="
+                                anchor-width: 52;
+                                anchor-height: 34;
+                                layout-mode: Center;
+                            "
                         >
-                            <img src="MediaRadio/Icons/next.png" width="18" height="18" />
+                            <img
+                                src="MediaRadio/Icons/next.png"
+                                width="18"
+                                height="18"
+                            />
                         </button>
                         <div style="anchor-width: 6"></div>
                         <button
@@ -242,24 +324,53 @@
                             data-hyui-default-bg="@MediaBtnDefault"
                             data-hyui-hovered-bg="@MediaBtnHover"
                             data-hyui-pressed-bg="@MediaBtnPressed"
-                            style="anchor-width: 52; anchor-height: 34; layout-mode: Center;"
+                            style="
+                                anchor-width: 52;
+                                anchor-height: 34;
+                                layout-mode: Center;
+                            "
                         >
-                            <img src="MediaRadio/Icons/stop.png" width="18" height="18" />
+                            <img
+                                src="MediaRadio/Icons/stop.png"
+                                width="18"
+                                height="18"
+                            />
                         </button>
                     </div>
-                    <div class="row" style="padding: 6 0 0 0; anchor-width: 584; anchor-height: 32">
+                    <div
+                        class="row"
+                        style="
+                            padding: 6 0 0 0;
+                            anchor-width: 584;
+                            anchor-height: 32;
+                        "
+                    >
                         <button
                             id="loop-button"
                             class="custom-button"
                             data-hyui-default-bg="@MediaBtnDefault"
                             data-hyui-hovered-bg="@MediaBtnHover"
                             data-hyui-pressed-bg="@MediaBtnPressed"
-                            style="anchor-width: 52; anchor-height: 32; layout-mode: Center;"
+                            style="
+                                anchor-width: 52;
+                                anchor-height: 32;
+                                layout-mode: Center;
+                            "
                         >
-                            <img src="MediaRadio/Icons/loop.png" width="18" height="18" />
+                            <img
+                                src="MediaRadio/Icons/loop.png"
+                                width="18"
+                                height="18"
+                            />
                         </button>
                         <div style="anchor-width: 6"></div>
-                        <p id="loop-label" class="subtle" style="anchor-width: 130; anchor-height: 32">{{$loopLabel}}</p>
+                        <p
+                            id="loop-label"
+                            class="subtle"
+                            style="anchor-width: 130; anchor-height: 32"
+                        >
+                            {{$loopLabel}}
+                        </p>
                         <div style="anchor-width: 12"></div>
                         <button
                             id="shuffle-button"
@@ -267,12 +378,26 @@
                             data-hyui-default-bg="@MediaBtnDefault"
                             data-hyui-hovered-bg="@MediaBtnHover"
                             data-hyui-pressed-bg="@MediaBtnPressed"
-                            style="anchor-width: 52; anchor-height: 32; layout-mode: Center;"
+                            style="
+                                anchor-width: 52;
+                                anchor-height: 32;
+                                layout-mode: Center;
+                            "
                         >
-                            <img src="MediaRadio/Icons/shuffle.png" width="18" height="18" />
+                            <img
+                                src="MediaRadio/Icons/shuffle.png"
+                                width="18"
+                                height="18"
+                            />
                         </button>
                         <div style="anchor-width: 6"></div>
-                        <p id="shuffle-label" class="subtle" style="anchor-width: 140; anchor-height: 32">{{$shuffleLabel}}</p>
+                        <p
+                            id="shuffle-label"
+                            class="subtle"
+                            style="anchor-width: 140; anchor-height: 32"
+                        >
+                            {{$shuffleLabel}}
+                        </p>
                     </div>
                 </div>
 
@@ -294,7 +419,8 @@
                         {{#each queueItems}}
                         <div
                             class="row list-item"
-                            style="                                anchor-height: 72;
+                            style="
+                                anchor-height: 72;
                                 anchor-width: 560;
                                 vertical-align: top;
                             "
@@ -318,8 +444,13 @@
                                 <p class="label-title" style="font-size: 14">
                                     {{$title}}
                                 </p>
-                                <p class="label-light" style="padding: 2 0 0 0">{{$artist}}</p>
-                                <p class="subtle" style="font-size: 11; padding: 2 0 0 0">
+                                <p class="label-light" style="padding: 2 0 0 0">
+                                    {{$artist}}
+                                </p>
+                                <p
+                                    class="subtle"
+                                    style="font-size: 11; padding: 2 0 0 0"
+                                >
                                     {{$status}}
                                 </p>
                             </div>
@@ -336,9 +467,17 @@
                                     data-hyui-default-bg="@MediaBtnDefault"
                                     data-hyui-hovered-bg="@MediaBtnHover"
                                     data-hyui-pressed-bg="@MediaBtnPressed"
-                                    style="anchor-width: 36; anchor-height: 30; layout-mode: Center"
+                                    style="
+                                        anchor-width: 36;
+                                        anchor-height: 30;
+                                        layout-mode: Center;
+                                    "
                                 >
-                                    <img src="MediaRadio/Icons/play.png" width="14" height="14" />
+                                    <img
+                                        src="MediaRadio/Icons/play.png"
+                                        width="14"
+                                        height="14"
+                                    />
                                 </button>
                                 <button
                                     id="{{$upId}}"
@@ -346,9 +485,18 @@
                                     data-hyui-default-bg="@MediaBtnDefault"
                                     data-hyui-hovered-bg="@MediaBtnHover"
                                     data-hyui-pressed-bg="@MediaBtnPressed"
-                                    style="anchor-left: 4; anchor-width: 32; anchor-height: 30; layout-mode: Center"
+                                    style="
+                                        anchor-left: 4;
+                                        anchor-width: 32;
+                                        anchor-height: 30;
+                                        layout-mode: Center;
+                                    "
                                 >
-                                    <img src="MediaRadio/Icons/up.png" width="14" height="14" />
+                                    <img
+                                        src="MediaRadio/Icons/up.png"
+                                        width="14"
+                                        height="14"
+                                    />
                                 </button>
                                 <button
                                     id="{{$downId}}"
@@ -356,9 +504,18 @@
                                     data-hyui-default-bg="@MediaBtnDefault"
                                     data-hyui-hovered-bg="@MediaBtnHover"
                                     data-hyui-pressed-bg="@MediaBtnPressed"
-                                    style="anchor-left: 4; anchor-width: 32; anchor-height: 30; layout-mode: Center"
+                                    style="
+                                        anchor-left: 4;
+                                        anchor-width: 32;
+                                        anchor-height: 30;
+                                        layout-mode: Center;
+                                    "
                                 >
-                                    <img src="MediaRadio/Icons/down.png" width="14" height="14" />
+                                    <img
+                                        src="MediaRadio/Icons/down.png"
+                                        width="14"
+                                        height="14"
+                                    />
                                 </button>
                                 <button
                                     id="{{$removeId}}"
@@ -366,9 +523,18 @@
                                     data-hyui-default-bg="@MediaBtnDefault"
                                     data-hyui-hovered-bg="@MediaBtnHover"
                                     data-hyui-pressed-bg="@MediaBtnPressed"
-                                    style="anchor-left: 4; anchor-width: 36; anchor-height: 30; layout-mode: Center"
+                                    style="
+                                        anchor-left: 4;
+                                        anchor-width: 36;
+                                        anchor-height: 30;
+                                        layout-mode: Center;
+                                    "
                                 >
-                                    <img src="MediaRadio/Icons/trash.png" width="14" height="14" />
+                                    <img
+                                        src="MediaRadio/Icons/trash.png"
+                                        width="14"
+                                        height="14"
+                                    />
                                 </button>
                             </div>
                         </div>
