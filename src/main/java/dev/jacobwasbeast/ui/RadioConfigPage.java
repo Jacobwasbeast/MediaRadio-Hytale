@@ -123,6 +123,8 @@ public final class RadioConfigPage {
         if (builder.getById("volume-input", TextFieldBuilder.class).isPresent()) {
             builder.addEventListener("volume-input", CustomUIEventBindingType.FocusGained, (ignored, ctx) ->
                     handleAction(store, ActionData.forAction("VolumeFocusGained")));
+            builder.addEventListener("volume-input", CustomUIEventBindingType.ValueChanged, String.class, (value, ctx) ->
+                    handleAction(store, ActionData.forAction("VolumeFocusGained")));
             builder.addEventListener("volume-input", CustomUIEventBindingType.FocusLost, (ignored, ctx) -> {
                 ActionData data = ActionData.forAction("VolumeFocusLost");
                 data.volumeText = ctx.getValue("volume-input", String.class).orElse(null);
@@ -1107,6 +1109,11 @@ public final class RadioConfigPage {
             scrubState.isScrubbing = false;
         }
 
+        // Skip pushing any page state while user is typing volume; updatePage(false) re-sends all builder state and would overwrite the field.
+        if (Boolean.TRUE.equals(VOLUME_EDITING.get(playerRef.getUuid()))) {
+            return true;
+        }
+
         PlaybackSession session = resolveSession();
         PlaylistManager playlistManager = MediaRadioPlugin.getInstance().getPlaylistManager();
         PlaylistManager.QueueState queue = playlistManager != null ? playlistManager.getQueue(getScopeId(store)) : null;
@@ -1136,10 +1143,7 @@ public final class RadioConfigPage {
             String nowThumb = resolveNowThumbnail(session, queue, mediaManager);
             updateImage(page, "now-thumb", nowThumb);
 
-            if (!Boolean.TRUE.equals(VOLUME_EDITING.get(playerRef.getUuid()))) {
-                int volumePercent = Math.round(VolumeUtil.clampPercent(VolumeUtil.eventDbToPercent(session.getVolume())));
-                updateTextField(page, "volume-input", String.valueOf(volumePercent));
-            }
+            // Do not update volume-input from timer; it overwrites user typing (updatePage re-sends builder state).
         } else {
             updateLabel(page, "now-title", "No Media Playing");
             updateLabel(page, "now-artist", "");
@@ -1150,20 +1154,7 @@ public final class RadioConfigPage {
             updateImage(page, "now-thumb", DEFAULT_IMAGE);
             updateImage(page, "play-pause-icon", "MediaRadio/Icons/play.png");
 
-            int volumePercent = VOLUME_DEFAULT_PERCENT;
-            var playbackManager = MediaRadioPlugin.getInstance().getPlaybackManager();
-            if (blockPos != null && playbackManager != null) {
-                volumePercent = Math.round(
-                        VolumeUtil.clampPercent(
-                                VolumeUtil.eventDbToPercent(playbackManager.getBlockVolume(blockPos, store))));
-            } else if (playbackManager != null) {
-                volumePercent = Math.round(
-                        VolumeUtil.clampPercent(
-                                VolumeUtil.eventDbToPercent(playbackManager.getPlayerVolume(playerRef.getUuid()))));
-            }
-            if (!Boolean.TRUE.equals(VOLUME_EDITING.get(playerRef.getUuid()))) {
-                updateTextField(page, "volume-input", String.valueOf(volumePercent));
-            }
+            // Do not update volume-input from timer; it overwrites user typing (updatePage re-sends builder state).
         }
 
         updateQueueStatuses(page, store, queue, session, mediaManager);
