@@ -23,8 +23,11 @@ import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import java.util.Collections;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.Writer;
 import java.net.URI;
+import java.net.URL;
+import java.net.URLConnection;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -1289,6 +1292,22 @@ public class MediaManager {
         return Files.exists(thumbnailPath.resolve(trackId + ".png"));
     }
 
+    public String getCustomThumbnailAssetPath(String trackId) {
+        return "UI/Custom/Pages/MediaRadio/Thumbs/custom_" + trackId + ".png";
+    }
+
+    public boolean hasCustomThumbnail(String trackId) {
+        return Files.exists(thumbnailPath.resolve("custom_" + trackId + ".png"));
+    }
+
+    public CompletableFuture<String> ensureCustomThumbnailFromUrlAsync(String imageUrl, String trackId) {
+        return CompletableFuture.supplyAsync(() -> ensureCustomThumbnailFromUrl(imageUrl, trackId, false));
+    }
+
+    public CompletableFuture<String> ensureCustomThumbnailFromUrlAsync(String imageUrl, String trackId, boolean force) {
+        return CompletableFuture.supplyAsync(() -> ensureCustomThumbnailFromUrl(imageUrl, trackId, force));
+    }
+
     public CompletableFuture<String> ensureThumbnailAsync(String url, String trackId) {
         return CompletableFuture.supplyAsync(() -> ensureThumbnail(url, trackId));
     }
@@ -1415,6 +1434,45 @@ public class MediaManager {
             return getThumbnailAssetPath(trackId);
         } catch (Exception e) {
             plugin.getLogger().at(Level.WARNING).withCause(e).log("Failed to download thumbnail for %s", trackId);
+            return "";
+        }
+    }
+
+    private String ensureCustomThumbnailFromUrl(String imageUrl, String trackId, boolean force) {
+        if (imageUrl == null || imageUrl.isEmpty()) {
+            return "";
+        }
+        String safeTrackId = (trackId == null || trackId.isEmpty()) ? getTrackIdForUrl(imageUrl) : trackId;
+        String fileName = "custom_" + safeTrackId + ".png";
+        Path pngPath = thumbnailPath.resolve(fileName);
+        if (Files.exists(pngPath) && !force) {
+            registerThumbnailAsset(pngPath, getCustomThumbnailAssetPath(safeTrackId));
+            return getCustomThumbnailAssetPath(safeTrackId);
+        }
+
+        try {
+            Files.createDirectories(thumbnailPath);
+            if (force && Files.exists(pngPath)) {
+                Files.deleteIfExists(pngPath);
+            }
+            URLConnection connection = new URL(imageUrl).openConnection();
+            connection.setRequestProperty("User-Agent", "MediaRadio");
+            connection.setConnectTimeout(8000);
+            connection.setReadTimeout(8000);
+            BufferedImage image;
+            try (InputStream stream = connection.getInputStream()) {
+                image = ImageIO.read(stream);
+            }
+            if (image == null) {
+                plugin.getLogger().at(Level.WARNING).log("Failed to read image from URL: %s", imageUrl);
+                return "";
+            }
+            ImageIO.write(image, "png", pngPath.toFile());
+            registerThumbnailAsset(pngPath, getCustomThumbnailAssetPath(safeTrackId));
+            return getCustomThumbnailAssetPath(safeTrackId);
+        } catch (Exception e) {
+            plugin.getLogger().at(Level.WARNING).withCause(e)
+                    .log("Failed to download custom thumbnail from %s", imageUrl);
             return "";
         }
     }

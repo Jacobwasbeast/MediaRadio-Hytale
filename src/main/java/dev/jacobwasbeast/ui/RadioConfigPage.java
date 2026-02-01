@@ -30,6 +30,7 @@ import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -552,9 +553,27 @@ public final class RadioConfigPage {
         }
         if ("SongEditSave".equals(action)) {
             var library = MediaRadioPlugin.getInstance().getMediaLibrary();
+            var mediaManager = MediaRadioPlugin.getInstance().getMediaManager();
             String url = EDITING_SONG_URL.get(playerRef.getUuid());
+            String rawIconUrl = data.icon != null ? data.icon.trim() : "";
+            if (!rawIconUrl.isEmpty() && !isHttpUrl(rawIconUrl)) {
+                rawIconUrl = "";
+            }
             if (library != null && url != null) {
-                library.updateCustomMetadata(scopeId, url, data.title, data.artist, data.description, data.icon);
+                if (!rawIconUrl.isEmpty() && mediaManager != null) {
+                    String trackId = mediaManager.getTrackIdForUrl(url);
+                    String iconUrl = rawIconUrl;
+                    mediaManager.ensureCustomThumbnailFromUrlAsync(iconUrl, trackId, true).thenAccept(assetPath -> {
+                        String iconAsset = assetPath != null && !assetPath.isEmpty() ? assetPath : null;
+                        library.updateCustomMetadata(scopeId, url, data.title, data.artist, data.description, iconAsset,
+                                iconUrl);
+                        EDITING_SONG_URL.remove(playerRef.getUuid());
+                        refreshUiAfterAction(store);
+                    });
+                    return;
+                }
+                library.updateCustomMetadata(scopeId, url, data.title, data.artist, data.description, null,
+                        rawIconUrl.isEmpty() ? null : rawIconUrl);
             }
             EDITING_SONG_URL.remove(playerRef.getUuid());
             refreshUiAfterAction(store);
@@ -855,7 +874,7 @@ public final class RadioConfigPage {
         vars.put("songTitleLabel", "Song Title");
         vars.put("songArtistLabel", "Artist Name");
         vars.put("descriptionLabel", "Description");
-        vars.put("iconLabel", "Icon Asset");
+        vars.put("iconLabel", "Image Raw URL");
 
         vars.put("urlPlaceholder", "Enter YouTube URL...");
         vars.put("urlValue", session != null && session.getUrl() != null ? session.getUrl() : "");
@@ -951,7 +970,15 @@ public final class RadioConfigPage {
             vars.put("songEditTitle", song != null ? resolveSongTitle(song) : "");
             vars.put("songEditArtist", song != null ? resolveSongArtist(song) : "");
             vars.put("songEditDescription", song != null && song.customDescription != null ? song.customDescription : "");
-            vars.put("songEditIcon", song != null && song.customIcon != null ? song.customIcon : "");
+            String editIcon = "";
+            if (song != null) {
+                if (song.customIconUrl != null && !song.customIconUrl.isEmpty()) {
+                    editIcon = song.customIconUrl;
+                } else if (isHttpUrl(song.customIcon)) {
+                    editIcon = song.customIcon;
+                }
+            }
+            vars.put("songEditIcon", editIcon);
         } else {
             vars.put("songEditTitle", "");
             vars.put("songEditArtist", "");
@@ -1248,8 +1275,38 @@ public final class RadioConfigPage {
         if (song == null) {
             return "";
         }
-        if (song.customIcon != null && !song.customIcon.isEmpty()) {
-            return song.customIcon;
+        if (song.customIcon != null && !song.customIcon.isEmpty() && !isHttpUrl(song.customIcon)) {
+            return normalizeUiAssetPath(song.customIcon);
+        }
+        String rawIconUrl = song.customIconUrl;
+        if ((rawIconUrl == null || rawIconUrl.isEmpty()) && isHttpUrl(song.customIcon)) {
+            rawIconUrl = song.customIcon;
+            song.customIconUrl = rawIconUrl;
+            if (library != null) {
+                library.save();
+            }
+        }
+        if (rawIconUrl != null && !rawIconUrl.isEmpty() && mediaManager != null) {
+            String trackId = song.trackId != null ? song.trackId : mediaManager.getTrackIdForUrl(song.url);
+            if (mediaManager.hasCustomThumbnail(trackId)) {
+                String assetPath = mediaManager.getCustomThumbnailAssetPath(trackId);
+                song.trackId = trackId;
+                song.customIcon = assetPath;
+                if (library != null) {
+                    library.save();
+                }
+                return normalizeUiAssetPath(assetPath);
+            }
+            mediaManager.ensureCustomThumbnailFromUrlAsync(rawIconUrl, trackId).thenAccept(assetPath -> {
+                if (assetPath == null || assetPath.isEmpty()) {
+                    return;
+                }
+                song.trackId = trackId;
+                song.customIcon = assetPath;
+                if (library != null) {
+                    library.save();
+                }
+            });
         }
         String assetPath = song.thumbnailAssetPath;
         if ((assetPath == null || assetPath.isEmpty()) && mediaManager != null && song.url != null) {
@@ -1292,7 +1349,7 @@ public final class RadioConfigPage {
             return "";
         }
         if (item.customIcon != null && !item.customIcon.isEmpty()) {
-            return item.customIcon;
+            return normalizeUiAssetPath(item.customIcon);
         }
         String assetPath = item.thumbnailAssetPath;
         if ((assetPath == null || assetPath.isEmpty()) && mediaManager != null && item.url != null) {
@@ -1304,6 +1361,14 @@ public final class RadioConfigPage {
             }
         }
         return normalizeUiAssetPath(assetPath);
+    }
+
+    private boolean isHttpUrl(String value) {
+        if (value == null || value.isEmpty()) {
+            return false;
+        }
+        String lower = value.toLowerCase(Locale.ROOT);
+        return lower.startsWith("http://") || lower.startsWith("https://");
     }
 
     private String resolveNowThumbnail(PlaybackSession session, PlaylistManager.QueueState queue,
