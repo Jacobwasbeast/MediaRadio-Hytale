@@ -222,8 +222,53 @@ public class PlaylistManager {
         QueueState queue = getQueue(scopeId);
         queue.shuffle = shuffle;
         if (shuffle && queue.items != null && queue.items.size() > 1) {
-            Collections.shuffle(queue.items);
+            int currentIndex = queue.index;
+            PlaylistItem current = null;
+            if (currentIndex >= 0 && currentIndex < queue.items.size()) {
+                current = queue.items.get(currentIndex);
+            }
+            List<PlaylistItem> reordered = new ArrayList<>(queue.items);
+            if (current != null) {
+                // Remove the currently playing item so we can keep it in place after shuffle.
+                reordered.remove(current);
+            }
+            Collections.shuffle(reordered);
+            if (current != null) {
+                int insertIndex = Math.min(currentIndex, reordered.size());
+                reordered.add(insertIndex, current);
+                queue.index = insertIndex;
+            } else {
+                queue.index = clampIndex(queue.index, reordered.size());
+            }
+            queue.items = reordered;
         }
+        save();
+    }
+
+    public synchronized void shuffleQueue(String scopeId) {
+        QueueState queue = getQueue(scopeId);
+        if (queue.items == null || queue.items.size() <= 1) {
+            return;
+        }
+        int currentIndex = queue.index;
+        PlaylistItem current = null;
+        if (currentIndex >= 0 && currentIndex < queue.items.size()) {
+            current = queue.items.get(currentIndex);
+        }
+        List<PlaylistItem> reordered = new ArrayList<>(queue.items);
+        if (current != null) {
+            reordered.remove(current);
+        }
+        Collections.shuffle(reordered);
+        if (current != null) {
+            int insertIndex = Math.min(currentIndex, reordered.size());
+            reordered.add(insertIndex, current);
+            queue.index = insertIndex;
+        } else {
+            queue.index = clampIndex(queue.index, reordered.size());
+        }
+        queue.items = reordered;
+        queue.shuffle = false;
         save();
     }
 

@@ -252,6 +252,25 @@
                     >
                         <div style="anchor-width: 140"></div>
                         <button
+                            id="loop-button"
+                            class="custom-button"
+                            data-hyui-default-bg="@MediaBtnDefault"
+                            data-hyui-hovered-bg="@MediaBtnHover"
+                            data-hyui-pressed-bg="@MediaBtnPressed"
+                            style="
+                                anchor-width: 52;
+                                anchor-height: 34;
+                                layout-mode: Center;
+                            "
+                        >
+                            <img
+                                src="MediaRadio/Icons/loop.png"
+                                width="18"
+                                height="18"
+                            />
+                        </button>
+                        <div style="anchor-width: 6"></div>
+                        <button
                             id="prev-button"
                             class="custom-button"
                             data-hyui-default-bg="@MediaBtnDefault"
@@ -284,7 +303,7 @@
                         >
                             <img
                                 id="play-pause-icon"
-                                src="MediaRadio/Icons/play.png"
+                                src="{{$playPauseIcon}}"
                                 width="18"
                                 height="18"
                             />
@@ -327,6 +346,25 @@
                                 height="18"
                             />
                         </button>
+                        <div style="anchor-width: 6"></div>
+                        <button
+                            id="shuffle-button"
+                            class="custom-button"
+                            data-hyui-default-bg="@MediaBtnDefault"
+                            data-hyui-hovered-bg="@MediaBtnHover"
+                            data-hyui-pressed-bg="@MediaBtnPressed"
+                            style="
+                                anchor-width: 52;
+                                anchor-height: 34;
+                                layout-mode: Center;
+                            "
+                        >
+                            <img
+                                src="MediaRadio/Icons/shuffle.png"
+                                width="18"
+                                height="18"
+                            />
+                        </button>
                     </div>
                     <div
                         class="row"
@@ -337,75 +375,13 @@
                         "
                     >
                         <div style="anchor-width: 140"></div>
-                        <div
-                            style="
-                                layout-mode: Left;
-                                anchor-left: 0;
-                                anchor-width: 174;
-                                anchor-height: 32;
-                            "
+                        <p
+                            id="loop-label"
+                            class="subtle"
+                            style="anchor-width: 130; anchor-height: 32"
                         >
-                            <button
-                                id="loop-button"
-                                class="custom-button"
-                                data-hyui-default-bg="@MediaBtnDefault"
-                                data-hyui-hovered-bg="@MediaBtnHover"
-                                data-hyui-pressed-bg="@MediaBtnPressed"
-                                style="
-                                    anchor-width: 52;
-                                    anchor-height: 32;
-                                    layout-mode: Center;
-                                "
-                            >
-                                <img
-                                    src="MediaRadio/Icons/loop.png"
-                                    width="18"
-                                    height="18"
-                                />
-                            </button>
-                            <div style="anchor-width: 6"></div>
-                            <p
-                                id="loop-label"
-                                class="subtle"
-                                style="anchor-width: 130; anchor-height: 32"
-                            >
-                                {{$loopLabel}}
-                            </p>
-                        </div>
-                        <div
-                            style="
-                                layout-mode: Left;
-                                anchor-width: 220;
-                                anchor-height: 32;
-                            "
-                        >
-                            <button
-                                id="shuffle-button"
-                                class="custom-button"
-                                data-hyui-default-bg="@MediaBtnDefault"
-                                data-hyui-hovered-bg="@MediaBtnHover"
-                                data-hyui-pressed-bg="@MediaBtnPressed"
-                                style="
-                                    anchor-width: 52;
-                                    anchor-height: 32;
-                                    layout-mode: Center;
-                                "
-                            >
-                                <img
-                                    src="MediaRadio/Icons/shuffle.png"
-                                    width="18"
-                                    height="18"
-                                />
-                            </button>
-                            <div style="anchor-width: 6"></div>
-                            <p
-                                id="shuffle-label"
-                                class="subtle"
-                                style="anchor-width: 140; anchor-height: 32"
-                            >
-                                {{$shuffleLabel}}
-                            </p>
-                        </div>
+                            {{$loopLabel}}
+                        </p>
                     </div>
                 </div>
 
@@ -454,12 +430,6 @@
                                 </p>
                                 <p class="label-light" style="padding: 2 0 0 0">
                                     {{$artist}}
-                                </p>
-                                <p
-                                    class="subtle"
-                                    style="font-size: 11; padding: 2 0 0 0"
-                                >
-                                    {{$status}}
                                 </p>
                             </div>
                             <div

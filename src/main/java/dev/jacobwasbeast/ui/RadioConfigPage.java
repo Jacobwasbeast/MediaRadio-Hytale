@@ -328,9 +328,7 @@ public final class RadioConfigPage {
         }
         if ("Shuffle".equals(action)) {
             if (playlistManager != null) {
-                PlaylistManager.QueueState queue = playlistManager.getQueue(scopeId);
-                boolean next = queue == null || !queue.shuffle;
-                playlistManager.setShuffle(scopeId, next);
+                playlistManager.shuffleQueue(scopeId);
             }
             refreshUiAfterAction(store);
             return;
@@ -781,31 +779,22 @@ public final class RadioConfigPage {
         vars.put("playlistTarget", playlistTarget);
 
         PlaybackSession session = resolveSession();
+        var mediaManager = MediaRadioPlugin.getInstance().getMediaManager();
         String nowTitle = "No Media Playing";
         String nowArtist = "";
         String nowTime = "0:00 / 0:00";
         int seekValue = 0;
         String pauseLabel = "Pause";
         String nowThumb = DEFAULT_IMAGE;
+        String playPauseIcon = "MediaRadio/Icons/play.png";
         if (session != null && !session.isStopped()) {
             nowTitle = session.getTitle().isEmpty() ? "Unknown Title" : session.getTitle();
             nowArtist = session.getArtist();
             pauseLabel = session.isPaused() ? "Resume" : "Pause";
             nowTime = formatTime(session.getCurrentPositionMs()) + " / " + formatTime(session.getTotalDurationMs());
             seekValue = (int) (session.getProgress() * 100);
-            String nowPlayingAsset = session.getThumbnailUrl();
-            if ((nowPlayingAsset == null || nowPlayingAsset.isEmpty()) && session.getUrl() != null) {
-                var mediaManager = MediaRadioPlugin.getInstance().getMediaManager();
-                if (mediaManager != null) {
-                    String trackId = mediaManager.getTrackIdForUrl(session.getUrl());
-                    if (mediaManager.hasThumbnail(trackId)) {
-                        nowPlayingAsset = mediaManager.getThumbnailAssetPath(trackId);
-                    }
-                }
-            }
-            if (nowPlayingAsset != null && !nowPlayingAsset.isEmpty()) {
-                nowThumb = nowPlayingAsset;
-            }
+            nowThumb = resolveNowThumbnail(session, queue, mediaManager);
+            playPauseIcon = session.isPaused() ? "MediaRadio/Icons/play.png" : "MediaRadio/Icons/pause.png";
         }
 
         int volumePercent = VOLUME_DEFAULT_PERCENT;
@@ -830,6 +819,7 @@ public final class RadioConfigPage {
         vars.put("seekValue", seekValue);
         vars.put("pauseLabel", pauseLabel);
         vars.put("nowThumb", nowThumb);
+        vars.put("playPauseIcon", playPauseIcon);
         vars.put("volumeLabel", "Volume");
         vars.put("volumeHint", "Max 200%");
         vars.put("volumeValue", String.valueOf(volumePercent));
@@ -838,7 +828,7 @@ public final class RadioConfigPage {
         vars.put("prevLabel", "Prev");
         vars.put("nextLabel", "Next");
         vars.put("loopLabel", resolveLoopLabel(queue));
-        vars.put("shuffleLabel", resolveShuffleLabel(queue));
+        // shuffle label removed from UI
         vars.put("queueLabel", "Queue");
         vars.put("queueLabelShort", "Queue");
         vars.put("libraryLabel", "Library");
@@ -866,7 +856,6 @@ public final class RadioConfigPage {
         vars.put("urlPlaceholder", "Enter YouTube URL...");
         vars.put("urlValue", session != null && session.getUrl() != null ? session.getUrl() : "");
 
-        var mediaManager = MediaRadioPlugin.getInstance().getMediaManager();
         List<QueueItemView> queueItems = new ArrayList<>();
         if (queue != null && queue.items != null) {
             for (int i = 0; i < queue.items.size(); i++) {
@@ -874,7 +863,7 @@ public final class RadioConfigPage {
                 QueueItemView view = new QueueItemView(i);
                 view.title = resolveItemTitle(item);
                 view.artist = resolveItemArtist(item);
-                view.status = (session != null && !session.isStopped() && i == queue.index) ? "Playing" : "";
+                view.status = "";
                 view.thumb = resolveItemIcon(item, mediaManager);
                 if (view.thumb == null || view.thumb.isEmpty()) {
                     view.thumb = DEFAULT_IMAGE;
@@ -1007,6 +996,7 @@ public final class RadioConfigPage {
     }
 
     private boolean updateTimeDisplay() {
+        var mediaManager = MediaRadioPlugin.getInstance().getMediaManager();
         ActivePage active = ACTIVE_PAGES.get(playerRef.getUuid());
         if (active == null || active.controller != this) {
             return false;
@@ -1042,23 +1032,12 @@ public final class RadioConfigPage {
                     formatTime(session.getCurrentPositionMs()) + " / " + formatTime(session.getTotalDurationMs()));
             updateSlider(page, "seek-slider", (int) (session.getProgress() * 100));
             updateLabel(page, "loop-label", resolveLoopLabel(queue));
-            updateLabel(page, "shuffle-label", resolveShuffleLabel(queue));
+            // shuffle label removed from UI
             updateImage(page, "play-pause-icon",
                     session.isPaused() ? "MediaRadio/Icons/play.png" : "MediaRadio/Icons/pause.png");
 
-            String nowPlayingAsset = session.getThumbnailUrl();
-            if ((nowPlayingAsset == null || nowPlayingAsset.isEmpty()) && session.getUrl() != null) {
-                var mediaManager = MediaRadioPlugin.getInstance().getMediaManager();
-                if (mediaManager != null) {
-                    String trackId = mediaManager.getTrackIdForUrl(session.getUrl());
-                    if (mediaManager.hasThumbnail(trackId)) {
-                        nowPlayingAsset = mediaManager.getThumbnailAssetPath(trackId);
-                    }
-                }
-            }
-            updateImage(page, "now-thumb", nowPlayingAsset != null && !nowPlayingAsset.isEmpty()
-                    ? normalizeUiAssetPath(nowPlayingAsset)
-                    : DEFAULT_IMAGE);
+            String nowThumb = resolveNowThumbnail(session, queue, mediaManager);
+            updateImage(page, "now-thumb", nowThumb);
 
             if (!Boolean.TRUE.equals(VOLUME_EDITING.get(playerRef.getUuid()))) {
                 int volumePercent = Math.round(VolumeUtil.clampPercent(VolumeUtil.eventDbToPercent(session.getVolume())));
@@ -1070,7 +1049,7 @@ public final class RadioConfigPage {
             updateLabel(page, "now-time", "0:00 / 0:00");
             updateSlider(page, "seek-slider", 0);
             updateLabel(page, "loop-label", resolveLoopLabel(queue));
-            updateLabel(page, "shuffle-label", resolveShuffleLabel(queue));
+            // shuffle label removed from UI
             updateImage(page, "now-thumb", DEFAULT_IMAGE);
             updateImage(page, "play-pause-icon", "MediaRadio/Icons/play.png");
 
@@ -1325,6 +1304,34 @@ public final class RadioConfigPage {
             }
         }
         return normalizeUiAssetPath(assetPath);
+    }
+
+    private String resolveNowThumbnail(PlaybackSession session, PlaylistManager.QueueState queue,
+            dev.jacobwasbeast.manager.MediaManager mediaManager) {
+        if (session == null || session.isStopped()) {
+            return DEFAULT_IMAGE;
+        }
+        if (queue != null && queue.items != null && queue.index >= 0 && queue.index < queue.items.size()) {
+            String icon = resolveItemIcon(queue.items.get(queue.index), mediaManager);
+            if (icon != null && !icon.isEmpty()) {
+                return icon;
+            }
+        }
+        String url = session.getUrl();
+        if (mediaManager != null && url != null && !url.isEmpty()) {
+            String trackId = mediaManager.getTrackIdForUrl(url);
+            if (trackId != null && mediaManager.hasThumbnail(trackId)) {
+                return normalizeUiAssetPath(mediaManager.getThumbnailAssetPath(trackId));
+            }
+            if (trackId != null) {
+                mediaManager.ensureThumbnailAsync(url, trackId);
+            }
+        }
+        String raw = session.getThumbnailUrl();
+        if (raw != null && !raw.isEmpty() && !raw.startsWith("http")) {
+            return normalizeUiAssetPath(raw);
+        }
+        return DEFAULT_IMAGE;
     }
 
     private static String normalizeUiAssetPath(String assetPath) {
