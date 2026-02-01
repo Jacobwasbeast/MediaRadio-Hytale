@@ -755,18 +755,24 @@ public final class RadioConfigPage {
         PLAYLIST_SOURCE.put(playerRef.getUuid(), source);
         String playlistScopeId = isBoombox && "player".equals(source) ? playerScopeId : scopeId;
 
+        String selectedPlaylistId = SELECTED_PLAYLIST.get(playerRef.getUuid());
+        PlaylistManager.Playlist selectedPlaylist = playlistManager != null
+                ? playlistManager.getPlaylist(playlistScopeId, selectedPlaylistId)
+                : null;
+        String selectedPlaylistName = selectedPlaylist != null && selectedPlaylist.name != null
+                ? selectedPlaylist.name
+                : "None Selected";
         String playlistTarget;
-        if (isBoombox) {
-            playlistTarget = "player".equals(source) ? "Target playlist: My Playlists" : "Target playlist: This Boombox";
-        } else {
-            playlistTarget = "Target playlist: My Playlists";
-        }
+        playlistTarget = "Target playlist: " + selectedPlaylistName;
 
         Map<String, Object> vars = new HashMap<>();
         vars.put("title", "Media Radio");
         vars.put("tabNowLabel", "Now Playing");
         vars.put("tabLibraryLabel", "Library");
-        vars.put("tabPlaylistsLabel", "Playlists");
+        String playlistsTabLabel = isBoombox && "boombox".equals(source)
+                ? "Boombox Playlists"
+                : "My Playlists";
+        vars.put("tabPlaylistsLabel", playlistsTabLabel);
         vars.put("tabNow", tabNow);
         vars.put("tabLibrary", tabLibrary);
         vars.put("tabPlaylists", tabPlaylists);
@@ -827,6 +833,9 @@ public final class RadioConfigPage {
         vars.put("queueLabel", "Queue");
         vars.put("queueLabelShort", "Queue");
         vars.put("libraryLabel", "Library");
+        vars.put("playlistsLabel", "Playlists");
+        vars.put("selectedPlaylistLabel", "Selected Playlist");
+        vars.put("playlistItemsLabel", "Playlist Items");
         vars.put("addLabel", "Add");
         vars.put("editLabel", "Edit");
         vars.put("removeLabel", "Remove");
@@ -915,10 +924,6 @@ public final class RadioConfigPage {
         vars.put("playlists", playlists);
 
         List<PlaylistItemView> playlistItems = new ArrayList<>();
-        String selectedPlaylistId = SELECTED_PLAYLIST.get(playerRef.getUuid());
-        PlaylistManager.Playlist selectedPlaylist = playlistManager != null
-                ? playlistManager.getPlaylist(playlistScopeId, selectedPlaylistId)
-                : null;
         if (selectedPlaylist != null && selectedPlaylist.items != null) {
             for (int i = 0; i < selectedPlaylist.items.size(); i++) {
                 PlaylistManager.PlaylistItem item = selectedPlaylist.items.get(i);

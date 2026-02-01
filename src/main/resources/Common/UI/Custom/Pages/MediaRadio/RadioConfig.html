@@ -855,66 +855,215 @@
                     class="divider"
                     style="anchor-width: 600; anchor-height: 1; margin-top: 10"
                 ></div>
+
                 <div class="row" style="padding: 8 0 0 0; anchor-width: 600">
                     <div
-                        style="
-                            layout-mode: TopScrolling;
-                            anchor-width: 220;
-                            anchor-height: 300;
-                            padding: 4;
-                        "
+                        class="column"
+                        style="anchor-width: 230; padding: 0 10 0 0"
                     >
-                        {{#each playlists}}
-                        <div class="row list-item" style="anchor-height: 54">
-                            <img src="{{$icon}}" width="32" height="32" />
+                        <p class="section-title">{{$playlistsLabel}}</p>
+                        <p
+                            class="subtle"
+                            style="font-size: 11; padding: 2 0 6 0"
+                        >
+                            {{$playlistTarget}}
+                        </p>
+                        <div
+                            style="
+                                layout-mode: TopScrolling;
+                                anchor-width: 220;
+                                anchor-height: 320;
+                                padding: 4;
+                            "
+                        >
+                            {{#each playlists}}
                             <div
-                                class="column"
-                                data-hyui-flexweight="1"
-                                style="padding: 0 0 0 6"
+                                class="row list-item"
+                                style="anchor-height: 60"
                             >
-                                <p class="label-title" style="font-size: 13">
-                                    {{$name}}
-                                </p>
-                                <p class="subtle" style="font-size: 11">
-                                    {{$count}}
-                                </p>
+                                <img src="{{$icon}}" width="36" height="36" />
+                                <div
+                                    class="column"
+                                    data-hyui-flexweight="1"
+                                    style="padding: 0 6 0 6"
+                                >
+                                    <p
+                                        class="label-title"
+                                        style="font-size: 13"
+                                    >
+                                        {{$name}}
+                                    </p>
+                                    <p class="subtle" style="font-size: 11">
+                                        {{$count}}
+                                    </p>
+                                </div>
+                                <button
+                                    id="{{$selectId}}"
+                                    class="custom-textbutton"
+                                    data-hyui-default-bg="@MediaBtnDefault"
+                                    data-hyui-hovered-bg="@MediaBtnHover"
+                                    data-hyui-pressed-bg="@MediaBtnPressed"
+                                    data-hyui-default-label-style="@mediabtnlabelcenter"
+                                    data-hyui-hovered-label-style="@mediabtnlabelcenter"
+                                    data-hyui-pressed-label-style="@mediabtnlabelcenter"
+                                    style="anchor-width: 60"
+                                >
+                                    {{$selectLabel}}
+                                </button>
                             </div>
-                            <button
-                                id="{{$selectId}}"
-                                class="custom-textbutton"
-                                data-hyui-default-bg="@MediaBtnDefault"
-                                data-hyui-hovered-bg="@MediaBtnHover"
-                                data-hyui-pressed-bg="@MediaBtnPressed"
-                                data-hyui-default-label-style="@mediabtnlabelcenter"
-                                data-hyui-hovered-label-style="@mediabtnlabelcenter"
-                                data-hyui-pressed-label-style="@mediabtnlabelcenter"
-                                style="anchor-width: 70"
-                            >
-                                {{$selectLabel}}
-                            </button>
+                            {{/each}}
                         </div>
-                        {{/each}}
                     </div>
 
                     <div
                         class="column"
                         data-hyui-flexweight="1"
-                        style="padding: 0 0 0 10"
+                        style="padding: 0 0 0 6; anchor-width: 360"
                     >
+                        <div
+                            class="panel"
+                            style="
+                                layout-mode: Top;
+                                padding: 10;
+                                anchor-width: 360;
+                                anchor-height: 170;
+                            "
+                        >
+                            <p class="section-title">
+                                {{$selectedPlaylistLabel}}
+                            </p>
+                            <input
+                                id="playlist-name"
+                                type="text"
+                                value="{{$playlistName}}"
+                                placeholder="{{$playlistNameLabel}}"
+                                style="anchor-height: 26; anchor-width: 340"
+                            />
+                            <input
+                                id="playlist-description"
+                                type="text"
+                                value="{{$playlistDescription}}"
+                                placeholder="{{$descriptionLabel}}"
+                                style="anchor-height: 26; anchor-width: 340"
+                            />
+                            <input
+                                id="playlist-icon"
+                                type="text"
+                                value="{{$playlistIcon}}"
+                                placeholder="{{$iconLabel}}"
+                                style="anchor-height: 26; anchor-width: 340"
+                            />
+                            <div
+                                class="row"
+                                style="padding: 6 0 0 0; anchor-width: 340"
+                            >
+                                <button
+                                    id="playlist-new"
+                                    class="custom-textbutton"
+                                    data-hyui-default-bg="@MediaBtnDefault"
+                                    data-hyui-hovered-bg="@MediaBtnHover"
+                                    data-hyui-pressed-bg="@MediaBtnPressed"
+                                    data-hyui-default-label-style="@mediabtnlabelcenter"
+                                    data-hyui-hovered-label-style="@mediabtnlabelcenter"
+                                    data-hyui-pressed-label-style="@mediabtnlabelcenter"
+                                    style="anchor-width: 100; anchor-height: 30"
+                                >
+                                    {{$newPlaylistLabel}}
+                                </button>
+                                <button
+                                    id="playlist-save"
+                                    class="custom-textbutton"
+                                    data-hyui-default-bg="@MediaBtnDefault"
+                                    data-hyui-hovered-bg="@MediaBtnHover"
+                                    data-hyui-pressed-bg="@MediaBtnPressed"
+                                    data-hyui-default-label-style="@mediabtnlabelcenter"
+                                    data-hyui-hovered-label-style="@mediabtnlabelcenter"
+                                    data-hyui-pressed-label-style="@mediabtnlabelcenter"
+                                    style="
+                                        anchor-left: 6;
+                                        anchor-width: 90;
+                                        anchor-height: 30;
+                                    "
+                                >
+                                    {{$saveLabel}}
+                                </button>
+                                <button
+                                    id="playlist-delete"
+                                    class="custom-textbutton"
+                                    data-hyui-default-bg="@MediaBtnDefault"
+                                    data-hyui-hovered-bg="@MediaBtnHover"
+                                    data-hyui-pressed-bg="@MediaBtnPressed"
+                                    data-hyui-default-label-style="@mediabtnlabelcenter"
+                                    data-hyui-hovered-label-style="@mediabtnlabelcenter"
+                                    data-hyui-pressed-label-style="@mediabtnlabelcenter"
+                                    style="
+                                        anchor-left: 6;
+                                        anchor-width: 100;
+                                        anchor-height: 30;
+                                    "
+                                >
+                                    {{$deletePlaylistLabel}}
+                                </button>
+                            </div>
+                            <div
+                                class="row"
+                                style="padding: 6 0 0 0; anchor-width: 340"
+                            >
+                                <button
+                                    id="playlist-load"
+                                    class="custom-textbutton"
+                                    data-hyui-default-bg="@MediaBtnDefault"
+                                    data-hyui-hovered-bg="@MediaBtnHover"
+                                    data-hyui-pressed-bg="@MediaBtnPressed"
+                                    data-hyui-default-label-style="@mediabtnlabelcenter"
+                                    data-hyui-hovered-label-style="@mediabtnlabelcenter"
+                                    data-hyui-pressed-label-style="@mediabtnlabelcenter"
+                                    style="anchor-width: 160; anchor-height: 30"
+                                >
+                                    {{$loadPlaylistLabel}}
+                                </button>
+                                <button
+                                    id="playlist-play"
+                                    class="custom-textbutton"
+                                    data-hyui-default-bg="@MediaBtnDefault"
+                                    data-hyui-hovered-bg="@MediaBtnHover"
+                                    data-hyui-pressed-bg="@MediaBtnPressed"
+                                    data-hyui-default-label-style="@mediabtnlabelcenter"
+                                    data-hyui-hovered-label-style="@mediabtnlabelcenter"
+                                    data-hyui-pressed-label-style="@mediabtnlabelcenter"
+                                    style="
+                                        anchor-left: 6;
+                                        anchor-width: 160;
+                                        anchor-height: 30;
+                                    "
+                                >
+                                    {{$playPlaylistLabel}}
+                                </button>
+                            </div>
+                        </div>
+
+                        <p class="section-title" style="padding: 10 0 4 2">
+                            {{$playlistItemsLabel}}
+                        </p>
                         <div
                             style="
                                 layout-mode: TopScrolling;
-                                anchor-height: 200;
+                                anchor-height: 210;
                                 anchor-width: 360;
-                                padding: 4;
+                                padding: 12 8 8 34;
                             "
                         >
                             {{#each playlistItems}}
                             <div
                                 class="row list-item"
-                                style="anchor-height: 56; anchor-width: 340"
+                                style="
+                                    anchor-height: 60;
+                                    anchor-width: 320;
+                                    padding: 6 8 6 12;
+                                    margin-left: 16;
+                                "
                             >
-                                <img src="{{$thumb}}" width="32" height="32" />
+                                <img src="{{$thumb}}" width="36" height="36" />
                                 <div
                                     class="column"
                                     data-hyui-flexweight="1"
@@ -935,160 +1084,83 @@
                                 </div>
                                 <button
                                     id="{{$playId}}"
-                                    class="custom-textbutton"
+                                    class="custom-button"
                                     data-hyui-default-bg="@MediaBtnDefault"
                                     data-hyui-hovered-bg="@MediaBtnHover"
                                     data-hyui-pressed-bg="@MediaBtnPressed"
-                                    data-hyui-default-label-style="@mediabtnlabelcenter"
-                                    data-hyui-hovered-label-style="@mediabtnlabelcenter"
-                                    data-hyui-pressed-label-style="@mediabtnlabelcenter"
-                                    style="anchor-width: 60"
+                                    style="
+                                        anchor-width: 32;
+                                        anchor-height: 30;
+                                        layout-mode: Center;
+                                    "
                                 >
-                                    {{$playLabel}}
+                                    <img
+                                        src="MediaRadio/Icons/play.png"
+                                        width="14"
+                                        height="14"
+                                    />
                                 </button>
                                 <button
                                     id="{{$upId}}"
-                                    class="custom-textbutton"
+                                    class="custom-button"
                                     data-hyui-default-bg="@MediaBtnDefault"
                                     data-hyui-hovered-bg="@MediaBtnHover"
                                     data-hyui-pressed-bg="@MediaBtnPressed"
-                                    data-hyui-default-label-style="@mediabtnlabelcenter"
-                                    data-hyui-hovered-label-style="@mediabtnlabelcenter"
-                                    data-hyui-pressed-label-style="@mediabtnlabelcenter"
-                                    style="anchor-left: 4; anchor-width: 36"
+                                    style="
+                                        anchor-left: 4;
+                                        anchor-width: 32;
+                                        anchor-height: 30;
+                                        layout-mode: Center;
+                                    "
                                 >
-                                    {{$upLabel}}
+                                    <img
+                                        src="MediaRadio/Icons/up.png"
+                                        width="14"
+                                        height="14"
+                                    />
                                 </button>
                                 <button
                                     id="{{$downId}}"
-                                    class="custom-textbutton"
+                                    class="custom-button"
                                     data-hyui-default-bg="@MediaBtnDefault"
                                     data-hyui-hovered-bg="@MediaBtnHover"
                                     data-hyui-pressed-bg="@MediaBtnPressed"
-                                    data-hyui-default-label-style="@mediabtnlabelcenter"
-                                    data-hyui-hovered-label-style="@mediabtnlabelcenter"
-                                    data-hyui-pressed-label-style="@mediabtnlabelcenter"
-                                    style="anchor-left: 4; anchor-width: 44"
+                                    style="
+                                        anchor-left: 4;
+                                        anchor-width: 32;
+                                        anchor-height: 30;
+                                        layout-mode: Center;
+                                    "
                                 >
-                                    {{$downLabel}}
+                                    <img
+                                        src="MediaRadio/Icons/down.png"
+                                        width="14"
+                                        height="14"
+                                    />
                                 </button>
                                 <button
                                     id="{{$removeId}}"
-                                    class="custom-textbutton"
+                                    class="custom-button"
                                     data-hyui-default-bg="@MediaBtnDefault"
                                     data-hyui-hovered-bg="@MediaBtnHover"
                                     data-hyui-pressed-bg="@MediaBtnPressed"
-                                    data-hyui-default-label-style="@mediabtnlabelcenter"
-                                    data-hyui-hovered-label-style="@mediabtnlabelcenter"
-                                    data-hyui-pressed-label-style="@mediabtnlabelcenter"
-                                    style="anchor-left: 4; anchor-width: 70"
+                                    style="
+                                        anchor-left: 4;
+                                        anchor-width: 32;
+                                        anchor-height: 30;
+                                        layout-mode: Center;
+                                    "
                                 >
-                                    {{$removeLabel}}
+                                    <img
+                                        src="MediaRadio/Icons/trash.png"
+                                        width="14"
+                                        height="14"
+                                    />
                                 </button>
                             </div>
                             {{/each}}
                         </div>
-
-                        <div
-                            class="panel"
-                            style="
-                                layout-mode: Top;
-                                anchor-height: 90;
-                                anchor-width: 360;
-                                padding: 10;
-                            "
-                        >
-                            <input
-                                id="playlist-name"
-                                type="text"
-                                value="{{$playlistName}}"
-                                placeholder="{{$playlistNameLabel}}"
-                                style="anchor-height: 26"
-                            />
-                            <input
-                                id="playlist-description"
-                                type="text"
-                                value="{{$playlistDescription}}"
-                                placeholder="{{$descriptionLabel}}"
-                                style="anchor-height: 26"
-                            />
-                            <input
-                                id="playlist-icon"
-                                type="text"
-                                value="{{$playlistIcon}}"
-                                placeholder="{{$iconLabel}}"
-                                style="anchor-height: 26"
-                            />
-                        </div>
                     </div>
-                </div>
-
-                <div class="row" style="padding: 8 0 0 0; anchor-width: 600">
-                    <button
-                        id="playlist-new"
-                        class="custom-textbutton"
-                        data-hyui-default-bg="@MediaBtnDefault"
-                        data-hyui-hovered-bg="@MediaBtnHover"
-                        data-hyui-pressed-bg="@MediaBtnPressed"
-                        data-hyui-default-label-style="@mediabtnlabelcenter"
-                        data-hyui-hovered-label-style="@mediabtnlabelcenter"
-                        data-hyui-pressed-label-style="@mediabtnlabelcenter"
-                        style="anchor-width: 110"
-                    >
-                        {{$newPlaylistLabel}}
-                    </button>
-                    <button
-                        id="playlist-save"
-                        class="custom-textbutton"
-                        data-hyui-default-bg="@MediaBtnDefault"
-                        data-hyui-hovered-bg="@MediaBtnHover"
-                        data-hyui-pressed-bg="@MediaBtnPressed"
-                        data-hyui-default-label-style="@mediabtnlabelcenter"
-                        data-hyui-hovered-label-style="@mediabtnlabelcenter"
-                        data-hyui-pressed-label-style="@mediabtnlabelcenter"
-                        style="anchor-left: 6; anchor-width: 80"
-                    >
-                        {{$saveLabel}}
-                    </button>
-                    <button
-                        id="playlist-delete"
-                        class="custom-textbutton"
-                        data-hyui-default-bg="@MediaBtnDefault"
-                        data-hyui-hovered-bg="@MediaBtnHover"
-                        data-hyui-pressed-bg="@MediaBtnPressed"
-                        data-hyui-default-label-style="@mediabtnlabelcenter"
-                        data-hyui-hovered-label-style="@mediabtnlabelcenter"
-                        data-hyui-pressed-label-style="@mediabtnlabelcenter"
-                        style="anchor-left: 6; anchor-width: 120"
-                    >
-                        {{$deletePlaylistLabel}}
-                    </button>
-                    <button
-                        id="playlist-load"
-                        class="custom-textbutton"
-                        data-hyui-default-bg="@MediaBtnDefault"
-                        data-hyui-hovered-bg="@MediaBtnHover"
-                        data-hyui-pressed-bg="@MediaBtnPressed"
-                        data-hyui-default-label-style="@mediabtnlabelcenter"
-                        data-hyui-hovered-label-style="@mediabtnlabelcenter"
-                        data-hyui-pressed-label-style="@mediabtnlabelcenter"
-                        style="anchor-left: 6; anchor-width: 110"
-                    >
-                        {{$loadPlaylistLabel}}
-                    </button>
-                    <button
-                        id="playlist-play"
-                        class="custom-textbutton"
-                        data-hyui-default-bg="@MediaBtnDefault"
-                        data-hyui-hovered-bg="@MediaBtnHover"
-                        data-hyui-pressed-bg="@MediaBtnPressed"
-                        data-hyui-default-label-style="@mediabtnlabelcenter"
-                        data-hyui-hovered-label-style="@mediabtnlabelcenter"
-                        data-hyui-pressed-label-style="@mediabtnlabelcenter"
-                        style="anchor-left: 6; anchor-width: 110"
-                    >
-                        {{$playPlaylistLabel}}
-                    </button>
                 </div>
                 {{/if}}
 
