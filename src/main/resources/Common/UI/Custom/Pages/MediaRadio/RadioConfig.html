@@ -118,12 +118,12 @@
                 class="column"
                 style="
                     layout-mode: Top;
-                    padding: 6;
+                    padding: 0 6 6 6;
                     anchor-width: 620;
                     anchor-height: 690;
                 "
             >
-                <div class="row" style="padding: 2 0 8 10; anchor-width: 600">
+                <div class="row" style="padding: 2 0 0 10; anchor-width: 600">
                     <button
                         id="tab-now"
                         class="custom-textbutton"
@@ -167,7 +167,7 @@
                 {{#if tabNow}}
                 <div
                     class="panel"
-                    style="anchor-width: 600; anchor-height: 190"
+                    style="anchor-width: 600; anchor-height: 190; margin-left: 10"
                 >
                     <div style="layout-mode: Left; anchor-width: 576; vertical-align: top">
                         <div
@@ -573,25 +573,19 @@
                     </div>
                 </div>
                 {{/if}}{{#if tabLibrary}}
-                <div class="row" style="padding: 6 0 0 0; anchor-width: 600">
-                    <div
-                        class="column"
-                        data-hyui-flexweight="1"
-                        style="padding: 0 8 0 0"
-                    >
-                        <input
-                            id="url-input"
-                            type="text"
-                            value="{{$urlValue}}"
-                            placeholder="{{$urlPlaceholder}}"
-                            style="anchor-width: 420; anchor-height: 40"
-                        />
-                        <p class="subtle" style="padding: 4 0 0 2">
-                            {{$playlistTarget}}
-                        </p>
-                    </div>
-                    <div class="row" style="padding: 0 0 0 6">
-                        <button
+                <div class="column" style="padding: 0; margin-left: 10">
+                    <div class="row" style="padding: 0; anchor-width: 600">
+                        <div class="column" data-hyui-flexweight="0" style="padding: 0 8 0 0">
+                            <input
+                                id="url-input"
+                                type="text"
+                                value="{{$urlValue}}"
+                                placeholder="{{$urlPlaceholder}}"
+                                style="anchor-width: 420; anchor-height: 40"
+                            />
+                        </div>
+                        <div class="row" style="padding: 0 0 0 6; anchor-height: 40; vertical-align: top">
+                            <button
                             id="play-url"
                             class="custom-button"
                             data-hyui-default-bg="@MediaBtnDefault"
@@ -599,7 +593,8 @@
                             data-hyui-pressed-bg="@MediaBtnPressed"
                             style="
                                 anchor-width: 46;
-                                anchor-height: 38;
+                                anchor-height: 40;
+                                anchor-left: 25;
                                 layout-mode: Center;
                             "
                         >
@@ -618,7 +613,7 @@
                             style="
                                 anchor-left: 6;
                                 anchor-width: 46;
-                                anchor-height: 38;
+                                anchor-height: 40;
                                 layout-mode: Center;
                             "
                         >
@@ -630,19 +625,28 @@
                         </button>
                     </div>
                 </div>
+                    <div style="padding: 6 0 0 20; anchor-left: 8">
+                        <p class="subtle" style="padding: 1; margin: 0">
+                            {{$playlistTarget}}
+                        </p>
+                    </div>
+                </div>
                 <div
                     class="divider"
-                    style="anchor-width: 600; anchor-height: 1; margin-top: 10"
+                    style="anchor-width: 600; anchor-height: 1; margin-top: 10; margin-left: 10"
                 ></div>
-                <p class="section-title" style="padding: 8 0 0 0">
-                    {{$libraryLabel}}
-                </p>
+                <div style="layout-mode: Left; anchor-width: 600; margin-left: 10">
+                    <p class="section-title" style="padding: 8 0 0 0; margin: 0">
+                        {{$libraryLabel}}
+                    </p>
+                </div>
                 <div
                     style="
                         layout-mode: TopScrolling;
                         anchor-width: 600;
                         anchor-height: 360;
                         padding: 4;
+                        margin-left: 10;
                     "
                 >
                     {{#each libraryItems}}
