@@ -120,9 +120,10 @@
                     layout-mode: Top;
                     padding: 0 6 6 6;
                     anchor-width: 620;
-                    anchor-height: 690;
+                    anchor-height: 640;
                 "
             >
+                <div class="column" data-hyui-flexweight="1" style="layout-mode: Top; padding: 0; min-height: 0">
                 <div class="row" style="padding: 2 0 0 10; anchor-width: 600">
                     <button
                         id="tab-now"
@@ -1224,12 +1225,14 @@
                     </div>
                 </div>
                 {{/if}}
+                </div>
 
-                <div class="row" style="padding: 10 0 0 0; anchor-width: 600">
+                <div class="row" style="padding: 0; anchor-width: 600; anchor-height: 36; margin-left: 10; flex-shrink: 0">
                     <button
                         id="cancel-button"
                         class="textbutton"
                         data-hyui-flexweight="1"
+                        style="anchor-height: 36"
                     >
                         {{$closeLabel}}
                     </button>
