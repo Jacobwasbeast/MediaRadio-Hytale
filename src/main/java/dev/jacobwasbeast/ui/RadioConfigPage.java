@@ -1130,8 +1130,35 @@ public final class RadioConfigPage {
             updateLabel(page, "loop-label", resolveLoopLabel(queue));
             updateImage(page, "play-pause-icon", "MediaRadio/Icons/play.png");
         } else if (session != null && !session.isStopped()) {
-            updateLabel(page, "now-title", session.getTitle().isEmpty() ? "Unknown Title" : session.getTitle());
-            updateLabel(page, "now-artist", session.getArtist());
+            String displayTitle = session.getTitle().isEmpty() ? "Unknown Title" : session.getTitle();
+            String displayArtist = session.getArtist();
+            String displayThumb = resolveNowThumbnail(session, queue, mediaManager);
+            String sessionUrlNormalized = normalizeUrl(mediaManager, session.getUrl());
+            if (libraryByUrl != null && sessionUrlNormalized != null) {
+                var song = libraryByUrl.get(sessionUrlNormalized);
+                if (song != null) {
+                    displayTitle = resolveSongTitle(song);
+                    displayArtist = resolveSongArtist(song);
+                    String icon = resolveSongIcon(song, mediaManager, MediaRadioPlugin.getInstance().getMediaLibrary());
+                    if (icon != null && !icon.isEmpty()) {
+                        displayThumb = icon;
+                    }
+                }
+            }
+            if (queue != null && queue.items != null && queue.index >= 0 && queue.index < queue.items.size()) {
+                PlaylistManager.PlaylistItem currentItem = queue.items.get(queue.index);
+                if (currentItem != null && sessionUrlNormalized != null
+                        && sessionUrlNormalized.equals(normalizeUrl(mediaManager, currentItem.url))) {
+                    displayTitle = resolveItemTitle(currentItem);
+                    displayArtist = resolveItemArtist(currentItem);
+                    String icon = resolveItemIcon(currentItem, mediaManager);
+                    if (icon != null && !icon.isEmpty()) {
+                        displayThumb = icon;
+                    }
+                }
+            }
+            updateLabel(page, "now-title", displayTitle);
+            updateLabel(page, "now-artist", displayArtist);
             updateLabel(page, "now-time",
                     formatTime(session.getCurrentPositionMs()) + " / " + formatTime(session.getTotalDurationMs()));
             updateSlider(page, "seek-slider", (int) (session.getProgress() * 100));
@@ -1139,9 +1166,7 @@ public final class RadioConfigPage {
             // shuffle label removed from UI
             updateImage(page, "play-pause-icon",
                     session.isPaused() ? "MediaRadio/Icons/play.png" : "MediaRadio/Icons/pause.png");
-
-            String nowThumb = resolveNowThumbnail(session, queue, mediaManager);
-            updateImage(page, "now-thumb", nowThumb);
+            updateImage(page, "now-thumb", displayThumb);
 
             // Do not update volume-input from timer; it overwrites user typing (updatePage re-sends builder state).
         } else {
