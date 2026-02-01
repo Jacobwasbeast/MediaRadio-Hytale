@@ -1242,6 +1242,25 @@ public final class RadioConfigPage {
         return player != null && player.getPageManager().getCustomPage() == page;
     }
 
+    /**
+     * Returns true if the radio config UI is still open for this player (hasn't been closed since we started loading).
+     */
+    private static boolean isRadioConfigStillOpen(PlayerRef playerRef, Store<EntityStore> store) {
+        if (playerRef == null || store == null) {
+            return false;
+        }
+        ActivePage active = ACTIVE_PAGES.get(playerRef.getUuid());
+        if (active == null) {
+            return false;
+        }
+        Ref<EntityStore> ref = playerRef.getReference();
+        if (ref == null || !ref.isValid()) {
+            return false;
+        }
+        Player player = store.getComponent(ref, Player.getComponentType());
+        return player != null && player.getPageManager().getCustomPage() == active.page;
+    }
+
     private void closePage(Store<EntityStore> store) {
         stopTimeUpdater(playerRef.getUuid());
         ActivePage active = ACTIVE_PAGES.remove(playerRef.getUuid());
@@ -1751,7 +1770,9 @@ public final class RadioConfigPage {
                                             mediaInfo.trackId,
                                             mediaInfo.thumbnailAssetPath);
                                 }
-                                refreshUiAfterAction(store);
+                                if (isRadioConfigStillOpen(playerRef, store)) {
+                                    refreshUiAfterAction(store);
+                                }
                             }))
                             .exceptionally(ex -> {
                                 store.getExternalData().getWorld().execute(() -> {
@@ -1785,7 +1806,9 @@ public final class RadioConfigPage {
                                             mediaInfo.trackId,
                                             mediaInfo.thumbnailAssetPath);
                                 }
-                                refreshUiAfterAction(store);
+                                if (isRadioConfigStillOpen(playerRef, store)) {
+                                    refreshUiAfterAction(store);
+                                }
                             }))
                             .exceptionally(ex -> {
                                 store.getExternalData().getWorld().execute(() -> {
