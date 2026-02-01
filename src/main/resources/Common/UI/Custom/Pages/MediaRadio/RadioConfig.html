@@ -574,6 +574,76 @@
                     </div>
                 </div>
                 {{/if}}{{#if tabLibrary}}
+                {{#if showSongEdit}}
+                <div
+                    class="panel"
+                    style="
+                        layout-mode: Top;
+                        anchor-width: 600;
+                        padding: 10;
+                        margin-left: 10;
+                        anchor-height: 220;
+                    "
+                >
+                    <p class="section-title">{{$editSongLabel}}</p>
+                    <input
+                        id="song-edit-title"
+                        type="text"
+                        value="{{$songEditTitle}}"
+                        placeholder="{{$songTitleLabel}}"
+                        style="anchor-height: 26"
+                    />
+                    <input
+                        id="song-edit-artist"
+                        type="text"
+                        value="{{$songEditArtist}}"
+                        placeholder="{{$songArtistLabel}}"
+                        style="anchor-height: 26"
+                    />
+                    <input
+                        id="song-edit-description"
+                        type="text"
+                        value="{{$songEditDescription}}"
+                        placeholder="{{$descriptionLabel}}"
+                        style="anchor-height: 26"
+                    />
+                    <input
+                        id="song-edit-icon"
+                        type="text"
+                        value="{{$songEditIcon}}"
+                        placeholder="{{$iconLabel}}"
+                        style="anchor-height: 26"
+                    />
+                    <div class="row" style="padding: 6 0 0 0">
+                        <button
+                            id="song-edit-save"
+                            class="custom-textbutton"
+                            data-hyui-default-bg="@MediaBtnDefault"
+                            data-hyui-hovered-bg="@MediaBtnHover"
+                            data-hyui-pressed-bg="@MediaBtnPressed"
+                            data-hyui-default-label-style="@mediabtnlabelcenter"
+                            data-hyui-hovered-label-style="@mediabtnlabelcenter"
+                            data-hyui-pressed-label-style="@mediabtnlabelcenter"
+                            style="anchor-width: 80"
+                        >
+                            {{$saveLabel}}
+                        </button>
+                        <button
+                            id="song-edit-cancel"
+                            class="custom-textbutton"
+                            data-hyui-default-bg="@MediaBtnDefault"
+                            data-hyui-hovered-bg="@MediaBtnHover"
+                            data-hyui-pressed-bg="@MediaBtnPressed"
+                            data-hyui-default-label-style="@mediabtnlabelcenter"
+                            data-hyui-hovered-label-style="@mediabtnlabelcenter"
+                            data-hyui-pressed-label-style="@mediabtnlabelcenter"
+                            style="anchor-left: 6; anchor-width: 80"
+                        >
+                            {{$cancelLabel}}
+                        </button>
+                    </div>
+                </div>
+                {{else}}
                 <div class="column" style="padding: 0; margin-left: 10">
                     <div class="row" style="padding: 0; anchor-width: 600">
                         <div class="column" data-hyui-flexweight="0" style="padding: 0 8 0 0">
@@ -790,76 +860,6 @@
                         </div>
                     </div>
                     {{/each}}
-                </div>
-
-                {{#if showSongEdit}}
-                <div
-                    class="panel"
-                    style="
-                        layout-mode: Top;
-                        anchor-height: 150;
-                        anchor-width: 600;
-                        padding: 10;
-                        margin-left: 10;
-                    "
-                >
-                    <p class="section-title">{{$editSongLabel}}</p>
-                    <input
-                        id="song-edit-title"
-                        type="text"
-                        value="{{$songEditTitle}}"
-                        placeholder="{{$songTitleLabel}}"
-                        style="anchor-height: 26"
-                    />
-                    <input
-                        id="song-edit-artist"
-                        type="text"
-                        value="{{$songEditArtist}}"
-                        placeholder="{{$songArtistLabel}}"
-                        style="anchor-height: 26"
-                    />
-                    <input
-                        id="song-edit-description"
-                        type="text"
-                        value="{{$songEditDescription}}"
-                        placeholder="{{$descriptionLabel}}"
-                        style="anchor-height: 26"
-                    />
-                    <input
-                        id="song-edit-icon"
-                        type="text"
-                        value="{{$songEditIcon}}"
-                        placeholder="{{$iconLabel}}"
-                        style="anchor-height: 26"
-                    />
-                    <div class="row" style="padding: 6 0 0 0">
-                        <button
-                            id="song-edit-save"
-                            class="custom-textbutton"
-                            data-hyui-default-bg="@MediaBtnDefault"
-                            data-hyui-hovered-bg="@MediaBtnHover"
-                            data-hyui-pressed-bg="@MediaBtnPressed"
-                            data-hyui-default-label-style="@mediabtnlabelcenter"
-                            data-hyui-hovered-label-style="@mediabtnlabelcenter"
-                            data-hyui-pressed-label-style="@mediabtnlabelcenter"
-                            style="anchor-width: 80"
-                        >
-                            {{$saveLabel}}
-                        </button>
-                        <button
-                            id="song-edit-cancel"
-                            class="custom-textbutton"
-                            data-hyui-default-bg="@MediaBtnDefault"
-                            data-hyui-hovered-bg="@MediaBtnHover"
-                            data-hyui-pressed-bg="@MediaBtnPressed"
-                            data-hyui-default-label-style="@mediabtnlabelcenter"
-                            data-hyui-hovered-label-style="@mediabtnlabelcenter"
-                            data-hyui-pressed-label-style="@mediabtnlabelcenter"
-                            style="anchor-left: 6; anchor-width: 80"
-                        >
-                            {{$cancelLabel}}
-                        </button>
-                    </div>
                 </div>
                 {{/if}} {{/if}} {{#if tabPlaylists}} {{#if showSourceToggle}}
                 <div class="row" style="padding: 4 0 0 0">
