@@ -567,6 +567,10 @@ public final class RadioConfigPage {
                         String iconAsset = assetPath != null && !assetPath.isEmpty() ? assetPath : null;
                         library.updateCustomMetadata(scopeId, url, data.title, data.artist, data.description, iconAsset,
                                 iconUrl);
+                        if (playlistManager != null) {
+                            var song = findSongByUrl(library, scopeId, url);
+                            playlistManager.applyCustomMetadata(scopeId, url, song);
+                        }
                         EDITING_SONG_URL.remove(playerRef.getUuid());
                         refreshUiAfterAction(store);
                     });
@@ -574,6 +578,10 @@ public final class RadioConfigPage {
                 }
                 library.updateCustomMetadata(scopeId, url, data.title, data.artist, data.description, null,
                         rawIconUrl.isEmpty() ? null : rawIconUrl);
+                if (playlistManager != null) {
+                    var song = findSongByUrl(library, scopeId, url);
+                    playlistManager.applyCustomMetadata(scopeId, url, song);
+                }
             }
             EDITING_SONG_URL.remove(playerRef.getUuid());
             refreshUiAfterAction(store);
@@ -800,6 +808,9 @@ public final class RadioConfigPage {
 
         PlaybackSession session = resolveSession();
         var mediaManager = MediaRadioPlugin.getInstance().getMediaManager();
+        var library = MediaRadioPlugin.getInstance().getMediaLibrary();
+        Map<String, dev.jacobwasbeast.manager.MediaLibrary.SavedSong> libraryByUrl =
+                buildLibraryIndex(library, scopeId, mediaManager);
         String nowTitle = "No Media Playing";
         String nowArtist = "";
         String nowTime = "0:00 / 0:00";
@@ -815,6 +826,18 @@ public final class RadioConfigPage {
             seekValue = (int) (session.getProgress() * 100);
             nowThumb = resolveNowThumbnail(session, queue, mediaManager);
             playPauseIcon = session.isPaused() ? "MediaRadio/Icons/play.png" : "MediaRadio/Icons/pause.png";
+        }
+        if (session != null && libraryByUrl != null) {
+            String normalized = normalizeUrl(mediaManager, session.getUrl());
+            var song = libraryByUrl.get(normalized);
+            if (song != null) {
+                nowTitle = resolveSongTitle(song);
+                nowArtist = resolveSongArtist(song);
+                String icon = resolveSongIcon(song, mediaManager, library);
+                if (icon != null && !icon.isEmpty()) {
+                    nowThumb = icon;
+                }
+            }
         }
 
         int volumePercent = VOLUME_DEFAULT_PERCENT;
@@ -884,10 +907,18 @@ public final class RadioConfigPage {
             for (int i = 0; i < queue.items.size(); i++) {
                 PlaylistManager.PlaylistItem item = queue.items.get(i);
                 QueueItemView view = new QueueItemView(i);
-                view.title = resolveItemTitle(item);
-                view.artist = resolveItemArtist(item);
+                dev.jacobwasbeast.manager.MediaLibrary.SavedSong song =
+                        libraryByUrl != null ? libraryByUrl.get(normalizeUrl(mediaManager, item.url)) : null;
+                if (song != null) {
+                    view.title = resolveSongTitle(song);
+                    view.artist = resolveSongArtist(song);
+                    view.thumb = resolveSongIcon(song, mediaManager, library);
+                } else {
+                    view.title = resolveItemTitle(item);
+                    view.artist = resolveItemArtist(item);
+                    view.thumb = resolveItemIcon(item, mediaManager);
+                }
                 view.status = "";
-                view.thumb = resolveItemIcon(item, mediaManager);
                 if (view.thumb == null || view.thumb.isEmpty()) {
                     view.thumb = DEFAULT_IMAGE;
                 }
@@ -901,7 +932,6 @@ public final class RadioConfigPage {
         vars.put("queueItems", queueItems);
 
         List<LibraryItemView> libraryItems = new ArrayList<>();
-        var library = MediaRadioPlugin.getInstance().getMediaLibrary();
         if (library != null) {
             for (dev.jacobwasbeast.manager.MediaLibrary.SavedSong song : library.getSongsForPlayer(scopeId)) {
                 LibraryItemView view = new LibraryItemView();
@@ -947,9 +977,17 @@ public final class RadioConfigPage {
             for (int i = 0; i < selectedPlaylist.items.size(); i++) {
                 PlaylistManager.PlaylistItem item = selectedPlaylist.items.get(i);
                 PlaylistItemView view = new PlaylistItemView(i);
-                view.title = resolveItemTitle(item);
-                view.artist = resolveItemArtist(item);
-                view.thumb = resolveItemIcon(item, mediaManager);
+                dev.jacobwasbeast.manager.MediaLibrary.SavedSong song =
+                        libraryByUrl != null ? libraryByUrl.get(normalizeUrl(mediaManager, item.url)) : null;
+                if (song != null) {
+                    view.title = resolveSongTitle(song);
+                    view.artist = resolveSongArtist(song);
+                    view.thumb = resolveSongIcon(song, mediaManager, library);
+                } else {
+                    view.title = resolveItemTitle(item);
+                    view.artist = resolveItemArtist(item);
+                    view.thumb = resolveItemIcon(item, mediaManager);
+                }
                 if (view.thumb == null || view.thumb.isEmpty()) {
                     view.thumb = DEFAULT_IMAGE;
                 }
@@ -1006,9 +1044,20 @@ public final class RadioConfigPage {
                 return existing;
             }
             return HytaleServer.SCHEDULED_EXECUTOR.scheduleAtFixedRate(() -> {
-                if (!updateTimeDisplay()) {
+                Ref<EntityStore> ref = playerRef.getReference();
+                if (ref == null || !ref.isValid()) {
                     stopTimeUpdater(playerId);
+                    return;
                 }
+                Store<EntityStore> store = ref.getStore();
+                if (store == null || store.getExternalData() == null || store.getExternalData().getWorld() == null) {
+                    return;
+                }
+                store.getExternalData().getWorld().execute(() -> {
+                    if (!updateTimeDisplay(store)) {
+                        stopTimeUpdater(playerId);
+                    }
+                });
             }, TIME_UPDATE_PERIOD_MS, TIME_UPDATE_PERIOD_MS, TimeUnit.MILLISECONDS);
         });
     }
@@ -1022,7 +1071,7 @@ public final class RadioConfigPage {
         VOLUME_EDITING.remove(playerId);
     }
 
-    private boolean updateTimeDisplay() {
+    private boolean updateTimeDisplay(Store<EntityStore> store) {
         var mediaManager = MediaRadioPlugin.getInstance().getMediaManager();
         ActivePage active = ACTIVE_PAGES.get(playerRef.getUuid());
         if (active == null || active.controller != this) {
@@ -1030,14 +1079,13 @@ public final class RadioConfigPage {
         }
         HyUIPage page = active.page;
         if (!isPageOpen(page)) {
+            long now = System.currentTimeMillis();
+            if (now - active.openedAtMs < 1500) {
+                return true;
+            }
             ACTIVE_PAGES.remove(playerRef.getUuid());
             return false;
         }
-        Ref<EntityStore> ref = playerRef.getReference();
-        if (ref == null || !ref.isValid()) {
-            return false;
-        }
-        Store<EntityStore> store = ref.getStore();
 
         ScrubState scrubState = SCRUB_STATES.get(playerRef.getUuid());
         if (scrubState != null && scrubState.isScrubbing) {
@@ -1371,6 +1419,34 @@ public final class RadioConfigPage {
         return lower.startsWith("http://") || lower.startsWith("https://");
     }
 
+    private Map<String, dev.jacobwasbeast.manager.MediaLibrary.SavedSong> buildLibraryIndex(
+            dev.jacobwasbeast.manager.MediaLibrary library,
+            String scopeId,
+            dev.jacobwasbeast.manager.MediaManager mediaManager) {
+        if (library == null || scopeId == null || scopeId.isEmpty()) {
+            return null;
+        }
+        Map<String, dev.jacobwasbeast.manager.MediaLibrary.SavedSong> map = new HashMap<>();
+        for (dev.jacobwasbeast.manager.MediaLibrary.SavedSong song : library.getSongsForPlayer(scopeId)) {
+            if (song == null || song.url == null || song.url.isEmpty()) {
+                continue;
+            }
+            String key = normalizeUrl(mediaManager, song.url);
+            map.put(key, song);
+        }
+        return map;
+    }
+
+    private String normalizeUrl(dev.jacobwasbeast.manager.MediaManager mediaManager, String url) {
+        if (url == null || url.isEmpty()) {
+            return url;
+        }
+        if (mediaManager == null) {
+            return url;
+        }
+        return mediaManager.normalizeUrl(url);
+    }
+
     private String resolveNowThumbnail(PlaybackSession session, PlaylistManager.QueueState queue,
             dev.jacobwasbeast.manager.MediaManager mediaManager) {
         if (session == null || session.isStopped()) {
@@ -1681,10 +1757,12 @@ public final class RadioConfigPage {
     private static final class ActivePage {
         private final HyUIPage page;
         private final RadioConfigPage controller;
+        private final long openedAtMs;
 
         private ActivePage(HyUIPage page, RadioConfigPage controller) {
             this.page = page;
             this.controller = controller;
+            this.openedAtMs = System.currentTimeMillis();
         }
     }
 

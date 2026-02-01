@@ -303,6 +303,47 @@ public class PlaylistManager {
         return false;
     }
 
+    public synchronized void applyCustomMetadata(String scopeId, String url, MediaLibrary.SavedSong song) {
+        if (scopeId == null || scopeId.isEmpty() || url == null || url.isEmpty() || song == null) {
+            return;
+        }
+        PlaylistScope scope = scopes.get(scopeId);
+        if (scope == null) {
+            return;
+        }
+        boolean changed = false;
+        if (scope.queue != null && scope.queue.items != null) {
+            for (PlaylistItem item : scope.queue.items) {
+                if (item != null && url.equals(item.url)) {
+                    item.customTitle = song.customTitle;
+                    item.customArtist = song.customArtist;
+                    item.customDescription = song.customDescription;
+                    item.customIcon = song.customIcon;
+                    changed = true;
+                }
+            }
+        }
+        if (scope.playlists != null) {
+            for (Playlist playlist : scope.playlists) {
+                if (playlist == null || playlist.items == null) {
+                    continue;
+                }
+                for (PlaylistItem item : playlist.items) {
+                    if (item != null && url.equals(item.url)) {
+                        item.customTitle = song.customTitle;
+                        item.customArtist = song.customArtist;
+                        item.customDescription = song.customDescription;
+                        item.customIcon = song.customIcon;
+                        changed = true;
+                    }
+                }
+            }
+        }
+        if (changed) {
+            save();
+        }
+    }
+
     private int clampIndex(int index, int size) {
         if (size <= 0) {
             return 0;
