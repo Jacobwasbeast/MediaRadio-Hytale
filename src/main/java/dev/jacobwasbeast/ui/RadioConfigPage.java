@@ -104,8 +104,7 @@ public final class RadioConfigPage {
             data.directUrl = ctx.getValue("url-input", String.class).orElse(null);
             handleAction(store, data);
         });
-        addButtonHandler(builder, "play-button", ctx -> handleAction(store, ActionData.forAction("PlayNow")));
-        addButtonHandler(builder, "pause-button", ctx -> handleAction(store, ActionData.forAction("Pause")));
+        addButtonHandler(builder, "play-pause-button", ctx -> handleAction(store, ActionData.forAction("PlayPause")));
         addButtonHandler(builder, "stop-button", ctx -> handleAction(store, ActionData.forAction("Stop")));
         addButtonHandler(builder, "prev-button", ctx -> handleAction(store, ActionData.forAction("Prev")));
         addButtonHandler(builder, "next-button", ctx -> handleAction(store, ActionData.forAction("Next")));
@@ -387,6 +386,36 @@ public final class RadioConfigPage {
                 }
             }
             refreshUiAfterAction(store);
+            return;
+        }
+        if ("PlayPause".equals(action)) {
+            PlaybackSession session = resolveSession();
+            if (session != null && !session.isStopped() && !session.isPaused()) {
+                store.getExternalData().getWorld().execute(() -> {
+                    if (blockPos != null) {
+                        MediaRadioPlugin.getInstance().getPlaybackManager().pause(blockPos);
+                    } else {
+                        MediaRadioPlugin.getInstance().getPlaybackManager().pauseByUser(playerRef);
+                    }
+                    refreshUiAfterAction(store);
+                });
+            } else if (playlistManager != null) {
+                if (session != null && session.isPaused()) {
+                    store.getExternalData().getWorld().execute(() -> {
+                        if (blockPos != null) {
+                            MediaRadioPlugin.getInstance().getPlaybackManager().resume(blockPos, store);
+                        } else {
+                            MediaRadioPlugin.getInstance().getPlaybackManager().resume(playerRef, store);
+                        }
+                        refreshUiAfterAction(store);
+                    });
+                } else {
+                    PlaylistManager.QueueState queue = playlistManager.getQueue(scopeId);
+                    if (queue != null && queue.items != null && !queue.items.isEmpty()) {
+                        playQueueIndex(scopeId, queue.index, store);
+                    }
+                }
+            }
             return;
         }
         if ("PlayNow".equals(action)) {
@@ -1014,6 +1043,8 @@ public final class RadioConfigPage {
             updateSlider(page, "seek-slider", (int) (session.getProgress() * 100));
             updateLabel(page, "loop-label", resolveLoopLabel(queue));
             updateLabel(page, "shuffle-label", resolveShuffleLabel(queue));
+            updateImage(page, "play-pause-icon",
+                    session.isPaused() ? "MediaRadio/Icons/play.png" : "MediaRadio/Icons/pause.png");
 
             String nowPlayingAsset = session.getThumbnailUrl();
             if ((nowPlayingAsset == null || nowPlayingAsset.isEmpty()) && session.getUrl() != null) {
@@ -1041,6 +1072,7 @@ public final class RadioConfigPage {
             updateLabel(page, "loop-label", resolveLoopLabel(queue));
             updateLabel(page, "shuffle-label", resolveShuffleLabel(queue));
             updateImage(page, "now-thumb", DEFAULT_IMAGE);
+            updateImage(page, "play-pause-icon", "MediaRadio/Icons/play.png");
 
             int volumePercent = VOLUME_DEFAULT_PERCENT;
             var playbackManager = MediaRadioPlugin.getInstance().getPlaybackManager();
