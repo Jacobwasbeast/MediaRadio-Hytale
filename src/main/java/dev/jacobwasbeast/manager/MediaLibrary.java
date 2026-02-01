@@ -212,6 +212,27 @@ public class MediaLibrary {
         save();
     }
 
+    public void updateCustomMetadata(String playerId, String url, String customTitle, String customArtist,
+            String customDescription, String customIcon) {
+        if (playerId == null || playerId.isEmpty() || url == null || url.isEmpty()) {
+            return;
+        }
+        List<SavedSong> songs = songsByPlayer.get(playerId);
+        if (songs == null) {
+            return;
+        }
+        for (SavedSong song : songs) {
+            if (song != null && url.equals(song.url)) {
+                song.customTitle = customTitle;
+                song.customArtist = customArtist;
+                song.customDescription = customDescription;
+                song.customIcon = customIcon;
+                save();
+                return;
+            }
+        }
+    }
+
     public static class SavedSong {
         public String title;
         public String artist;
@@ -221,6 +242,10 @@ public class MediaLibrary {
         public String thumbnailAssetPath;
         public long duration;
         public String status;
+        public String customTitle;
+        public String customArtist;
+        public String customDescription;
+        public String customIcon;
 
         public SavedSong(String title, String artist, String url, String thumbnailUrl, long duration, String trackId,
                 String thumbnailAssetPath) {

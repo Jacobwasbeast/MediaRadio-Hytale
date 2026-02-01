@@ -49,11 +49,13 @@ javadoc {
 // the official launcher for now.
 repositories {
     mavenCentral()
+    maven { url "https://www.cursemaven.com" }
 }
 
 dependencies {
     implementation(files("$hytaleHome/install/$patchline/package/game/latest/Server/HytaleServer.jar"))
     implementation(project(":media-tools"))
+    implementation "curse.maven:hyui-1431415:7553930"
 }
 
 // Create the working directory to run the server if it does not already exist.

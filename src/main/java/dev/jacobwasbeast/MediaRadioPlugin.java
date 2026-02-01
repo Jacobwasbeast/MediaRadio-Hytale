@@ -24,6 +24,7 @@ public class MediaRadioPlugin extends JavaPlugin {
     private MediaManager mediaManager;
     private dev.jacobwasbeast.manager.MediaLibrary mediaLibrary;
     private dev.jacobwasbeast.manager.MediaPlaybackManager playbackManager;
+    private dev.jacobwasbeast.manager.PlaylistManager playlistManager;
     private dev.jacobwasbeast.config.MediaRadioConfig config;
     private volatile boolean markerCleanupDone = false;
     private ScheduledFuture<?> markerCleanupTask;
@@ -66,6 +67,10 @@ public class MediaRadioPlugin extends JavaPlugin {
         this.mediaLibrary.resetTransientStatuses();
         this.getLogger().at(Level.INFO).log("MediaLibrary initialized.");
 
+        // Initialize PlaylistManager
+        this.playlistManager = new dev.jacobwasbeast.manager.PlaylistManager(this);
+        this.getLogger().at(Level.INFO).log("PlaylistManager initialized.");
+
         // Initialize MediaPlaybackManager
         this.playbackManager = new dev.jacobwasbeast.manager.MediaPlaybackManager(this);
         this.getLogger().at(Level.INFO).log("PlaybackManager initialized.");
@@ -97,7 +102,11 @@ public class MediaRadioPlugin extends JavaPlugin {
                 com.hypixel.hytale.server.core.event.events.player.PlayerDisconnectEvent.class,
                 event -> {
                     if (playbackManager != null) {
-                        var store = event.getPlayerRef().getReference().getStore();
+                        var ref = event.getPlayerRef().getReference();
+                        if (ref == null) {
+                            return;
+                        }
+                        var store = ref.getStore();
                         playbackManager.stopForPlayer(event.getPlayerRef().getUuid(), store);
                     }
                 });
@@ -220,6 +229,10 @@ public class MediaRadioPlugin extends JavaPlugin {
 
     public dev.jacobwasbeast.manager.MediaPlaybackManager getPlaybackManager() {
         return playbackManager;
+    }
+
+    public dev.jacobwasbeast.manager.PlaylistManager getPlaylistManager() {
+        return playlistManager;
     }
 
     public dev.jacobwasbeast.config.MediaRadioConfig getConfig() {

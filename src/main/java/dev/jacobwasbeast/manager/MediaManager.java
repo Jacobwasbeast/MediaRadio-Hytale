@@ -1465,6 +1465,10 @@ public class MediaManager {
                 return CompletableFuture.completedFuture(null);
             }
         }
+        var playlistManager = plugin.getPlaylistManager();
+        if (playlistManager != null && playlistManager.isUrlReferenced(url)) {
+            return CompletableFuture.completedFuture(null);
+        }
         String trackId = getTrackIdForUrl(url);
         var playbackManager = plugin.getPlaybackManager();
         if (playbackManager != null) {

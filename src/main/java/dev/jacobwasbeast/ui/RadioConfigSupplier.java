@@ -1,7 +1,6 @@
 package dev.jacobwasbeast.ui;
 
 import com.hypixel.hytale.codec.Codec;
-import com.hypixel.hytale.codec.KeyedCodec;
 import com.hypixel.hytale.codec.builder.BuilderCodec;
 import com.hypixel.hytale.component.ComponentAccessor;
 import com.hypixel.hytale.component.Ref;
@@ -13,13 +12,17 @@ import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import javax.annotation.Nullable;
 
 public record RadioConfigSupplier() implements OpenCustomUIInteraction.CustomPageSupplier {
-        public static final Codec<RadioConfigSupplier> CODEC = BuilderCodec
-                        .builder(RadioConfigSupplier.class, RadioConfigSupplier::new).build();
+    public static final Codec<RadioConfigSupplier> CODEC = BuilderCodec
+            .builder(RadioConfigSupplier.class, RadioConfigSupplier::new).build();
 
-        @Override
-        @Nullable
+    @Override
+    @Nullable
     public CustomUIPage tryCreate(Ref<EntityStore> ref, ComponentAccessor<EntityStore> componentAccessor,
-                    PlayerRef playerRef, InteractionContext context) {
-                return new RadioConfigPage(playerRef);
+            PlayerRef playerRef, InteractionContext context) {
+        if (ref == null || playerRef == null) {
+            return null;
         }
+        RadioConfigPage.open(playerRef, ref.getStore(), null);
+        return null;
+    }
 }
