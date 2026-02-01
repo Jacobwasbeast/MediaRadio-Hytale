@@ -17,12 +17,15 @@ import com.hypixel.hytale.server.core.entity.entities.Player;
 import com.hypixel.hytale.server.core.modules.block.BlockModule;
 import com.hypixel.hytale.server.core.modules.entity.component.TransformComponent;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
+import com.hypixel.hytale.server.core.asset.type.blocktype.config.BlockType;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.chunk.BlockComponentChunk;
+import com.hypixel.hytale.server.core.universe.world.chunk.WorldChunk;
 import com.hypixel.hytale.server.core.universe.world.storage.ChunkStore;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import dev.jacobwasbeast.MediaRadioPlugin;
 import dev.jacobwasbeast.manager.PlaylistManager;
+import dev.jacobwasbeast.util.BlockTypeUtil;
 import dev.jacobwasbeast.util.PlaybackScopeUtil;
 import dev.jacobwasbeast.util.RadioItemUtil;
 import dev.jacobwasbeast.util.VolumeUtil;
@@ -510,11 +513,21 @@ public class MediaPlaybackManager {
         if (!session.isPlaying()) {
             return;
         }
-        if (!session.isPlayerBound() && !isBlockPlaybackValid(session)) {
-            session.stop();
-            removeSession(session);
-            handleSessionEnded(session, store, false);
-            return;
+        if (!session.isPlayerBound()) {
+            if (!isBlockPlaybackValid(session)) {
+                session.stop();
+                removeSession(session);
+                handleSessionEnded(session, store, false);
+                return;
+            }
+            // Double-check block is still a boombox (by block ID) and has not been destroyed.
+            Vector3i blockPos = session.getBlockPosition();
+            if (blockPos == null || !isBoomboxBlockStillThere(store, blockPos)) {
+                session.stop();
+                removeSession(session);
+                handleSessionEnded(session, store, false);
+                return;
+            }
         }
         // For handheld radio: pause if radio is no longer in hand or offhand (events may be missed).
         if (session.isPlayerBound()) {
@@ -752,6 +765,29 @@ public class MediaPlaybackManager {
             return true;
         }
         return blockRef.isValid();
+    }
+
+    /**
+     * Double-check the block at the position is still a boombox (by block ID) and has not been destroyed.
+     */
+    private boolean isBoomboxBlockStillThere(Store<EntityStore> store, Vector3i pos) {
+        if (pos == null || store == null) {
+            return false;
+        }
+        World world = store.getExternalData().getWorld();
+        if (world == null) {
+            return false;
+        }
+        WorldChunk chunk = world.getChunkIfInMemory(ChunkUtil.indexChunkFromBlock(pos.getX(), pos.getZ()));
+        if (chunk == null) {
+            return false;
+        }
+        BlockType blockType = chunk.getBlockType(pos.getX(), pos.getY(), pos.getZ());
+        if (blockType == null) {
+            return false;
+        }
+        String blockId = blockType.getId();
+        return BlockTypeUtil.isBoomboxBlockId(blockId);
     }
 
     private void removeSession(PlaybackSession session) {
