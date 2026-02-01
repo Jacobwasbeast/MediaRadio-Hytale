@@ -85,11 +85,6 @@ public final class RadioConfigPage {
     }
 
     private void registerEvents(PageBuilder builder, Store<EntityStore> store, UiModel model) {
-        if (builder.getById("tab-now", ButtonBuilder.class).isEmpty()) {
-            MediaRadioPlugin.getInstance().getLogger().atSevere()
-                    .log("HyUI template missing expected element id: tab-now");
-            return;
-        }
         addButtonHandler(builder, "tab-now", ctx -> handleAction(store, ActionData.forAction("TabNow")));
         addButtonHandler(builder, "tab-library", ctx -> handleAction(store, ActionData.forAction("TabLibrary")));
         addButtonHandler(builder, "tab-playlists", ctx -> handleAction(store, ActionData.forAction("TabPlaylists")));
