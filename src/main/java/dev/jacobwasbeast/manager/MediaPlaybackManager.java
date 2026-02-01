@@ -516,6 +516,14 @@ public class MediaPlaybackManager {
             handleSessionEnded(session, store, false);
             return;
         }
+        // For handheld radio: pause if radio is no longer in hand or offhand (events may be missed).
+        if (session.isPlayerBound()) {
+            PlayerRef playerRef = session.getPlayerRef();
+            if (playerRef != null && !shouldKeepPlaying(playerRef, store)) {
+                session.pauseByUnheld();
+                return;
+            }
+        }
 
         String trackId = session.getTrackId();
         String chunkTrackId = session.getCurrentChunkTrackId();
