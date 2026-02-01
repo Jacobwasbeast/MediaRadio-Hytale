@@ -21,6 +21,20 @@
         background-color: #0d1a2b(0.65);
         padding: 10 12;
     }
+    .now-playing-thumb-wrap {
+        background-color: #0d1a2b(0.65);
+        padding: 0;
+    }
+    .list-thumb-wrap {
+        background-color: #0d1a2b(0.65);
+        padding: 0;
+    }
+    .now-playing-thumb-wrap img,
+    .list-thumb-wrap img,
+    .thumb-no-pad img {
+        padding: 0;
+        margin: 0;
+    }
     .panel {
         background-color: #0a1422(0.75);
         padding: 10 12;
@@ -71,6 +85,18 @@
     @mediabtnlabelcenter {
         color: #dfe7f1;
         font-size: 12;
+        font-weight: bold;
+        text-align: middlecenter;
+        vertical-align: center;
+        horizontal-align: center;
+        white-space: nowrap;
+        text-transform: none;
+        letter-spacing: 0;
+        outline-color: rgba(0, 0, 0, 0.45);
+    }
+    @mediabtnlabelcentersmall {
+        color: #dfe7f1;
+        font-size: 11;
         font-weight: bold;
         text-align: middlecenter;
         vertical-align: center;
@@ -143,53 +169,51 @@
                     class="panel"
                     style="anchor-width: 600; anchor-height: 190"
                 >
-                    <div style="anchor-height: 6"></div>
-                    <div style="anchor-height: 14"></div>
-                    <div style="layout-mode: Left; anchor-width: 576">
+                    <div style="layout-mode: Left; anchor-width: 576; vertical-align: top">
                         <div
-                            class="card"
+                            class="now-playing-thumb-wrap"
                             style="
-                                anchor-width: 112;
-                                anchor-height: 112;
+                                anchor-width: 96;
+                                anchor-height: 96;
                                 layout-mode: Top;
-                                padding: 6;
                             "
                         >
                             <img
                                 id="now-thumb"
                                 src="{{$nowThumb}}"
-                                width="100"
-                                height="100"
+                                width="96"
+                                height="96"
                             />
                         </div>
+                        <div style="anchor-width: 28"></div>
                         <div
                             class="column"
                             data-hyui-flexweight="1"
-                            style="padding: 0 0 0 12"
+                            style="padding: 0; layout-mode: Top; min-width: 0"
                         >
-                            <div style="anchor-height: 18"></div>
+                            <div style="anchor-height: 40; layout-mode: Top"></div>
                             <p
                                 id="now-title"
                                 class="label-title"
-                                style="font-size: 16"
+                                style="font-size: 16; padding: 0; margin: 0; white-space: normal"
                             >
                                 {{$nowTitle}}
                             </p>
                             <p
                                 id="now-artist"
                                 class="label-light"
-                                style="padding: 4 0 0 0"
+                                style="padding: 4 0 0 0; margin: 0"
                             >
                                 {{$nowArtist}}
                             </p>
                             <div
                                 class="row"
-                                style="padding: 6 0 0 0; anchor-width: 448"
+                                style="padding: 10 0 0 0; anchor-width: 448"
                             >
                                 <p
                                     id="now-time"
                                     class="subtle"
-                                    style="anchor-width: 110"
+                                    style="anchor-width: 110; padding: 0; margin: 0"
                                 >
                                     {{$nowTime}}
                                 </p>
@@ -205,11 +229,11 @@
                             </div>
                             <div
                                 class="row"
-                                style="padding: 8 0 0 0; anchor-width: 448"
+                                style="padding: 10 0 0 0; anchor-width: 448"
                             >
-                                <div class="column" style="anchor-width: 70">
-                                    <p class="subtle">{{$volumeLabel}}</p>
-                                    <p class="subtle" style="font-size: 11">
+                                <div class="column" style="anchor-width: 70; padding: 0; margin: 0">
+                                    <p class="subtle" style="padding: 0; margin: 0">{{$volumeLabel}}</p>
+                                    <p class="subtle" style="font-size: 11; padding: 2 0 0 0; margin: 0">
                                         {{$volumeHint}}
                                     </p>
                                 </div>
@@ -430,13 +454,13 @@
                                 vertical-align: top;
                             "
                         >
-                            <div style="anchor-width: 6"></div>
                             <div
+                                class="thumb-no-pad"
                                 style="
-                                    anchor-width: 56;
-                                    anchor-height: 56;
+                                    anchor-width: 72;
+                                    anchor-height: 48;
                                     layout-mode: Top;
-                                    padding: 2 0 0 0;
+                                    padding: 0 4 0 20;
                                 "
                             >
                                 <img src="{{$thumb}}" width="48" height="48" />
@@ -444,18 +468,19 @@
                             <div
                                 class="column"
                                 data-hyui-flexweight="1"
-                                style="padding: 2 0 0 8"
+                                style="padding: 0 0 0 8; layout-mode: Top"
                             >
-                                <p class="label-title" style="font-size: 14">
+                                <div style="anchor-height: 6; layout-mode: Top"></div>
+                                <p class="label-title" style="font-size: 14; padding: 0; margin: 0">
                                     {{$title}}
                                 </p>
-                                <p class="label-light" style="padding: 2 0 0 0">
+                                <p class="label-light" style="padding: 2 0 0 0; margin: 0">
                                     {{$artist}}
                                 </p>
                                 <p
                                     id="{{$statusId}}"
                                     class="subtle"
-                                    style="font-size: 11; padding: 2 0 0 0"
+                                    style="font-size: 11; padding: 2 0 0 0; margin: 0"
                                 >
                                     {{$status}}
                                 </p>
@@ -627,15 +652,16 @@
                             anchor-height: 82;
                             anchor-width: 580;
                             margin-top: 6;
+                            vertical-align: top;
                         "
                     >
                         <div
-                            class="card"
+                            class="list-thumb-wrap"
                             style="
-                                anchor-width: 60;
-                                anchor-height: 60;
-                                layout-mode: Center;
-                                padding: 2;
+                                anchor-width: 74;
+                                anchor-height: 54;
+                                layout-mode: Top;
+                                padding: 0 4 0 20;
                             "
                         >
                             <img src="{{$thumb}}" width="54" height="54" />
@@ -643,15 +669,16 @@
                         <div
                             class="column"
                             data-hyui-flexweight="1"
-                            style="padding: 0 0 0 10"
+                            style="padding: 0 0 0 10; layout-mode: Top"
                         >
-                            <p class="label-title" style="font-size: 14">
+                            <div style="anchor-height: 10; layout-mode: Top"></div>
+                            <p class="label-title" style="font-size: 14; padding: 0; margin: 0">
                                 {{$title}}
                             </p>
-                            <p class="label-light">{{$artist}}</p>
+                            <p class="label-light" style="padding: 2 0 0 0; margin: 0">{{$artist}}</p>
                             <p
                                 class="subtle"
-                                style="font-size: 11; padding: 2 0 0 0"
+                                style="font-size: 11; padding: 2 0 0 0; margin: 0"
                             >
                                 {{$status}}
                             </p>
@@ -866,7 +893,7 @@
                 <div class="row" style="padding: 8 0 0 0; anchor-width: 600">
                     <div
                         class="column"
-                        style="anchor-width: 230; padding: 0 10 0 0"
+                        style="anchor-width: 268; padding: 0 10 0 0"
                     >
                         <p class="section-title">{{$playlistsLabel}}</p>
                         <p
@@ -878,7 +905,7 @@
                         <div
                             style="
                                 layout-mode: TopScrolling;
-                                anchor-width: 220;
+                                anchor-width: 258;
                                 anchor-height: 320;
                                 padding: 4;
                             "
@@ -886,21 +913,32 @@
                             {{#each playlists}}
                             <div
                                 class="row list-item"
-                                style="anchor-height: 60"
+                                style="anchor-height: 60; vertical-align: top"
                             >
-                                <img src="{{$icon}}" width="36" height="36" />
+                                <div
+                                    class="list-thumb-wrap"
+                                    style="
+                                        anchor-width: 42;
+                                        anchor-height: 36;
+                                        layout-mode: Top;
+                                        padding: 0 2 0 6;
+                                    "
+                                >
+                                    <img src="{{$icon}}" width="36" height="36" />
+                                </div>
                                 <div
                                     class="column"
                                     data-hyui-flexweight="1"
-                                    style="padding: 0 6 0 6"
+                                    style="padding: 0 0 0 4; layout-mode: Top"
                                 >
+                                    <div style="anchor-height: 6; layout-mode: Top"></div>
                                     <p
                                         class="label-title"
-                                        style="font-size: 13"
+                                        style="font-size: 13; padding: 0; margin: 0"
                                     >
                                         {{$name}}
                                     </p>
-                                    <p class="subtle" style="font-size: 11">
+                                    <p class="subtle" style="font-size: 11; padding: 2 0 0 0; margin: 0">
                                         {{$count}}
                                     </p>
                                 </div>
@@ -910,10 +948,10 @@
                                     data-hyui-default-bg="@MediaBtnDefault"
                                     data-hyui-hovered-bg="@MediaBtnHover"
                                     data-hyui-pressed-bg="@MediaBtnPressed"
-                                    data-hyui-default-label-style="@mediabtnlabelcenter"
-                                    data-hyui-hovered-label-style="@mediabtnlabelcenter"
-                                    data-hyui-pressed-label-style="@mediabtnlabelcenter"
-                                    style="anchor-width: 60"
+                                    data-hyui-default-label-style="@mediabtnlabelcentersmall"
+                                    data-hyui-hovered-label-style="@mediabtnlabelcentersmall"
+                                    data-hyui-pressed-label-style="@mediabtnlabelcentersmall"
+                                    style="anchor-width: 80"
                                 >
                                     {{$selectLabel}}
                                 </button>
@@ -925,14 +963,14 @@
                     <div
                         class="column"
                         data-hyui-flexweight="1"
-                        style="padding: 0 0 0 6; anchor-width: 360"
+                        style="padding: 0 0 0 6; anchor-width: 322"
                     >
                         <div
                             class="panel"
                             style="
                                 layout-mode: Top;
                                 padding: 10;
-                                anchor-width: 360;
+                                anchor-width: 322;
                                 anchor-height: 170;
                             "
                         >
@@ -944,25 +982,25 @@
                                 type="text"
                                 value="{{$playlistName}}"
                                 placeholder="{{$playlistNameLabel}}"
-                                style="anchor-height: 26; anchor-width: 340"
+                                style="anchor-height: 26; anchor-width: 302"
                             />
                             <input
                                 id="playlist-description"
                                 type="text"
                                 value="{{$playlistDescription}}"
                                 placeholder="{{$descriptionLabel}}"
-                                style="anchor-height: 26; anchor-width: 340"
+                                style="anchor-height: 26; anchor-width: 302"
                             />
                             <input
                                 id="playlist-icon"
                                 type="text"
                                 value="{{$playlistIcon}}"
                                 placeholder="{{$iconLabel}}"
-                                style="anchor-height: 26; anchor-width: 340"
+                                style="anchor-height: 26; anchor-width: 302"
                             />
                             <div
                                 class="row"
-                                style="padding: 6 0 0 0; anchor-width: 340"
+                                style="padding: 6 0 0 0; anchor-width: 302"
                             >
                                 <button
                                     id="playlist-new"
@@ -1014,7 +1052,7 @@
                             </div>
                             <div
                                 class="row"
-                                style="padding: 6 0 0 0; anchor-width: 340"
+                                style="padding: 6 0 0 0; anchor-width: 302"
                             >
                                 <button
                                     id="playlist-load"
@@ -1056,7 +1094,7 @@
                             style="
                                 layout-mode: TopScrolling;
                                 anchor-height: 210;
-                                anchor-width: 360;
+                                anchor-width: 322;
                                 padding: 12 8 8 34;
                             "
                         >
@@ -1065,26 +1103,38 @@
                                 class="row list-item"
                                 style="
                                     anchor-height: 60;
-                                    anchor-width: 320;
+                                    anchor-width: 280;
                                     padding: 6 8 6 12;
                                     margin-left: 16;
+                                    vertical-align: top;
                                 "
                             >
-                                <img src="{{$thumb}}" width="36" height="36" />
+                                <div
+                                    class="list-thumb-wrap"
+                                    style="
+                                        anchor-width: 56;
+                                        anchor-height: 36;
+                                        layout-mode: Top;
+                                        padding: 0 4 0 20;
+                                    "
+                                >
+                                    <img src="{{$thumb}}" width="36" height="36" />
+                                </div>
                                 <div
                                     class="column"
                                     data-hyui-flexweight="1"
-                                    style="padding: 0 0 0 6"
+                                    style="padding: 0 0 0 6; layout-mode: Top"
                                 >
+                                    <div style="anchor-height: 6; layout-mode: Top"></div>
                                     <p
                                         class="label-title"
-                                        style="font-size: 13"
+                                        style="font-size: 13; padding: 0; margin: 0"
                                     >
                                         {{$title}}
                                     </p>
                                     <p
                                         class="label-light"
-                                        style="font-size: 11"
+                                        style="font-size: 11; padding: 2 0 0 0; margin: 0"
                                     >
                                         {{$artist}}
                                     </p>
