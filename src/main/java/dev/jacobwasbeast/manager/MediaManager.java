@@ -5,6 +5,7 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.hypixel.hytale.assetstore.AssetLoadResult;
 import com.hypixel.hytale.assetstore.AssetUpdateQuery;
+import com.hypixel.hytale.assetstore.AssetPack;
 import com.hypixel.hytale.common.plugin.PluginManifest;
 import com.hypixel.hytale.common.semver.Semver;
 import com.hypixel.hytale.math.vector.Vector3i;
@@ -14,7 +15,9 @@ import com.hypixel.hytale.server.core.asset.common.CommonAssetRegistry;
 import com.hypixel.hytale.server.core.asset.common.asset.FileCommonAsset;
 import com.hypixel.hytale.server.core.asset.type.model.config.ModelAsset;
 import com.hypixel.hytale.server.core.asset.type.soundevent.config.SoundEvent;
+import com.hypixel.hytale.server.core.asset.monitor.AssetMonitor;
 import dev.jacobwasbeast.MediaRadioPlugin;
+import dev.jacobwasbeast.util.CommonAssetUtil;
 import dev.jacobwasbeast.util.VolumeUtil;
 import dev.jacobwasbeast.util.EmbeddedTools;
 
@@ -155,9 +158,36 @@ public class MediaManager {
 
             plugin.getLogger().at(Level.INFO).log("Registering runtime asset pack at: %s", runtimeAssetsPath);
             AssetModule.get().registerPack(RUNTIME_PACK_NAME, runtimeAssetsPath, manifest);
+            disableRuntimeAssetNotifications();
 
         } catch (Exception e) {
             plugin.getLogger().at(Level.SEVERE).withCause(e).log("Failed to register runtime asset pack");
+        }
+    }
+
+    private void disableRuntimeAssetNotifications() {
+        AssetModule assetModule = AssetModule.get();
+        if (assetModule == null) {
+            return;
+        }
+        AssetMonitor monitor = assetModule.getAssetMonitor();
+        if (monitor == null) {
+            return;
+        }
+        AssetPack runtimePack = assetModule.getAssetPacks()
+                .stream()
+                .filter(pack -> RUNTIME_PACK_NAME.equals(pack.getName()))
+                .findFirst()
+                .orElse(null);
+        if (runtimePack == null) {
+            return;
+        }
+        Path commonPath = runtimePack.getRoot().resolve("Common");
+        if (Files.isDirectory(commonPath)) {
+            monitor.removeMonitorDirectoryFiles(commonPath, runtimePack);
+        }
+        if (Files.isDirectory(serverSoundEventsPath)) {
+            SoundEvent.getAssetStore().removeFileMonitor(serverSoundEventsPath);
         }
     }
 
@@ -504,7 +534,10 @@ public class MediaManager {
             }
             try {
                 byte[] bytes = Files.readAllBytes(chunkPath);
-                commonAssetModule.addCommonAsset(RUNTIME_PACK_NAME, new FileCommonAsset(chunkPath, assetName, bytes));
+                CommonAssetUtil.addCommonAssetSilent(
+                        RUNTIME_PACK_NAME,
+                        new FileCommonAsset(chunkPath, assetName, bytes),
+                        false);
             } catch (IOException e) {
                 plugin.getLogger().at(Level.WARNING).withCause(e).log("Failed to register sound asset %s", assetName);
             }
@@ -933,7 +966,10 @@ public class MediaManager {
 
         try {
             byte[] bytes = Files.readAllBytes(existingPath);
-            commonAssetModule.addCommonAsset(RUNTIME_PACK_NAME, new FileCommonAsset(existingPath, assetName, bytes));
+            CommonAssetUtil.addCommonAssetSilent(
+                    RUNTIME_PACK_NAME,
+                    new FileCommonAsset(existingPath, assetName, bytes),
+                    false);
         } catch (IOException e) {
             plugin.getLogger().at(Level.WARNING).withCause(e).log("Failed to register common model asset %s",
                     assetName);
@@ -965,7 +1001,10 @@ public class MediaManager {
         String assetName = "NPC/MediaRadio/Animations/radio_play.blockyanim";
         try {
             byte[] bytes = Files.readAllBytes(animPath);
-            commonAssetModule.addCommonAsset(RUNTIME_PACK_NAME, new FileCommonAsset(animPath, assetName, bytes));
+            CommonAssetUtil.addCommonAssetSilent(
+                    RUNTIME_PACK_NAME,
+                    new FileCommonAsset(animPath, assetName, bytes),
+                    false);
             plugin.getLogger().atInfo().log("Successfully registered animation asset: " + assetName);
         } catch (IOException e) {
             plugin.getLogger().at(Level.WARNING).withCause(e).log("Failed to register radio_play animation");
@@ -977,8 +1016,10 @@ public class MediaManager {
             String modelAssetName = "NPC/MISC/Empty.blockymodel";
             try {
                 byte[] bytes = Files.readAllBytes(modelPath);
-                commonAssetModule.addCommonAsset(RUNTIME_PACK_NAME,
-                        new FileCommonAsset(modelPath, modelAssetName, bytes));
+                CommonAssetUtil.addCommonAssetSilent(
+                        RUNTIME_PACK_NAME,
+                        new FileCommonAsset(modelPath, modelAssetName, bytes),
+                        false);
             } catch (IOException e) {
                 plugin.getLogger().at(Level.WARNING).withCause(e).log("Failed to register Empty.blockymodel");
             }
@@ -990,8 +1031,10 @@ public class MediaManager {
             String textureAssetName = "NPC/MISC/Empty.png";
             try {
                 byte[] bytes = Files.readAllBytes(texturePath);
-                commonAssetModule.addCommonAsset(RUNTIME_PACK_NAME,
-                        new FileCommonAsset(texturePath, textureAssetName, bytes));
+                CommonAssetUtil.addCommonAssetSilent(
+                        RUNTIME_PACK_NAME,
+                        new FileCommonAsset(texturePath, textureAssetName, bytes),
+                        false);
             } catch (IOException e) {
                 plugin.getLogger().at(Level.WARNING).withCause(e).log("Failed to register Empty.png");
             }
@@ -1496,7 +1539,10 @@ public class MediaManager {
         }
         try {
             byte[] bytes = Files.readAllBytes(pngPath);
-            commonAssetModule.addCommonAsset(RUNTIME_PACK_NAME, new FileCommonAsset(pngPath, assetPath, bytes));
+            CommonAssetUtil.addCommonAssetSilent(
+                    RUNTIME_PACK_NAME,
+                    new FileCommonAsset(pngPath, assetPath, bytes),
+                    false);
         } catch (IOException e) {
             plugin.getLogger().at(Level.WARNING).withCause(e).log("Failed to register thumbnail asset %s", assetPath);
         }
