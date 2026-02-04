@@ -45,8 +45,7 @@ public class MediaRadioPlugin extends JavaPlugin {
 
         // Initialize Config
         this.config = MediaRadioConfig.load(resolveRuntimeBasePath());
-        this.getLogger().at(Level.INFO).log("MediaRadioConfig initialized. Chunk duration: %dms",
-                config.getChunkDurationMs());
+        this.getLogger().at(Level.INFO).log("MediaRadioConfig initialized. Chunk duration: 2000ms (fixed)");
 
         this.getLogger().at(Level.INFO).log("MediaRadioPlugin codecs registered.");
     }

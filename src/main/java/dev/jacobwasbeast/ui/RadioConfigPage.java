@@ -1781,7 +1781,7 @@ public final class RadioConfigPage {
                 }
                 if (blockPos != null) {
                     mediaManager.playSoundAtBlock(mediaInfo, blockPos,
-                            MediaRadioPlugin.getInstance().getConfig().getChunkDurationMs(), store)
+                            dev.jacobwasbeast.manager.MediaManager.CHUNK_DURATION_MS, store)
                             .thenRun(() -> store.getExternalData().getWorld().execute(() -> {
                                 if (library != null) {
                                     library.upsertSongStatus(

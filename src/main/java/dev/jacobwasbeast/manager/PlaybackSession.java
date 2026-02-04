@@ -44,6 +44,7 @@ public class PlaybackSession {
     private boolean isStopped = true;
     private boolean loopEnabled = false;
     private ScheduledFuture<?> scheduledNextChunk;
+    private ScheduledFuture<?> scheduledPositionUpdate;
 
     public PlaybackSession(String trackId, Vector3i blockPosition, int totalChunks, int chunkDurationMs) {
         this(trackId, blockPosition, totalChunks, chunkDurationMs, "", "", "", "", 0);
@@ -207,6 +208,7 @@ public class PlaybackSession {
             pausedAtMs = System.currentTimeMillis();
             pausedOffsetMs = Math.max(0, pausedAtMs - currentChunkStartMs);
             cancelScheduledChunk();
+            // Keep position updates running during pause so marker stays with player/block
         }
     }
 
@@ -224,6 +226,7 @@ public class PlaybackSession {
         missingAssetRetries = 0;
         lastScheduleLagMs = 0;
         cancelScheduledChunk();
+        cancelScheduledPositionUpdate();
     }
 
     public void resetMissingAssetRetries() {
@@ -343,6 +346,22 @@ public class PlaybackSession {
             scheduledNextChunk.cancel(false);
         }
         scheduledNextChunk = null;
+    }
+    
+    public ScheduledFuture<?> getScheduledPositionUpdate() {
+        return scheduledPositionUpdate;
+    }
+    
+    public void setScheduledPositionUpdate(ScheduledFuture<?> future) {
+        cancelScheduledPositionUpdate();
+        this.scheduledPositionUpdate = future;
+    }
+    
+    private void cancelScheduledPositionUpdate() {
+        if (scheduledPositionUpdate != null && !scheduledPositionUpdate.isDone()) {
+            scheduledPositionUpdate.cancel(false);
+        }
+        scheduledPositionUpdate = null;
     }
 
     /**

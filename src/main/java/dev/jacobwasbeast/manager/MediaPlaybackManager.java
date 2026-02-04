@@ -47,6 +47,7 @@ import com.hypixel.hytale.server.npc.entities.NPCEntity;
 public class MediaPlaybackManager {
     private final MediaRadioPlugin plugin;
     private final PlaylistManager playlistManager;
+    private final BatchPlaybackManager batchManager;
     private final Map<String, PlaybackSession> activeBlockSessions = new ConcurrentHashMap<>();
     private final Map<UUID, PlaybackSession> activePlayerSessions = new ConcurrentHashMap<>();
     private final Map<UUID, Boolean> loopPreferences = new ConcurrentHashMap<>();
@@ -56,12 +57,14 @@ public class MediaPlaybackManager {
     private static final long MISSING_ASSET_RETRY_DELAY_MS = 500;
     private static final long BASE_CHUNK_OVERLAP_MS = 15;
     private static final long MAX_CHUNK_OVERLAP_MS = 120;
+    private static final long MARKER_POSITION_UPDATE_INTERVAL_MS = 50; // Update marker position every 50ms for smooth tracking
 
     private int audioMarkerRoleIndex = Integer.MIN_VALUE;
 
     public MediaPlaybackManager(MediaRadioPlugin plugin) {
         this.plugin = plugin;
         this.playlistManager = plugin.getPlaylistManager();
+        this.batchManager = new BatchPlaybackManager(plugin, plugin.getMediaManager());
     }
 
     /**
@@ -539,21 +542,28 @@ public class MediaPlaybackManager {
         }
 
         String trackId = session.getTrackId();
-        String chunkTrackId = session.getCurrentChunkTrackId();
         int chunkIndex = session.getCurrentChunk();
-
-        // Look up chunk SoundEvent and Track Model
+        
+        // Ensure batches are loaded for rolling window (async, non-blocking)
+        float volumeDb = session.getVolume();
+        batchManager.ensureBatchesLoaded(trackId, chunkIndex, volumeDb);
+        
+        // Calculate which batch this chunk belongs to
+        int currentBatch = chunkIndex / MediaManager.LAYERS_PER_BATCH;
+        String batchId = BatchPlaybackManager.getBatchId(trackId, currentBatch);
+        
+        // Look up batch SoundEvent and Track Model
         // We now use a single model "medradio_marker_<trackId>" for the whole track
         String trackAppearanceId = "medradio_marker_" + trackId;
 
-        SoundEvent soundEvent = SoundEvent.getAssetMap().getAsset(chunkTrackId);
+        SoundEvent soundEvent = SoundEvent.getAssetMap().getAsset(batchId);
         ModelAsset trackModel = ModelAsset.getAssetMap().getAsset(trackAppearanceId);
 
         if (soundEvent == null || trackModel == null) {
             // Log less frequently or debug
             if (session.getMissingAssetRetries() % 5 == 0) {
-                plugin.getLogger().at(Level.WARNING).log("Chunk Asset not ready: %s (Sound or Model missing)",
-                        chunkTrackId);
+                plugin.getLogger().at(Level.WARNING).log("Batch Asset not ready: %s (Sound or Model missing)",
+                        batchId);
             }
             scheduleMissingAssetRetry(session, store);
             return;
@@ -624,9 +634,12 @@ public class MediaPlaybackManager {
             NPCEntity.setAppearance(marker, trackAppearanceId, (ComponentAccessor<EntityStore>) store);
         }
 
-        // Trigger Animation State for this chunk
+        // Trigger Animation State for this batch
+        // Use the batch ID for the animation state
         NPCEntity npc = session.getNPCEntity();
         if (npc != null) {
+            // For batch system, we still use chunk-based animation states for compatibility
+            // But the sound event is batch-based
             String animationState = "PlayChunk" + chunkIndex;
             npc.playAnimation(marker, AnimationSlot.Action, animationState, (ComponentAccessor<EntityStore>) store);
         } else {
@@ -636,20 +649,82 @@ public class MediaPlaybackManager {
         // Schedule next chunk
         scheduleNextChunk(session, store);
 
-        // Update position if player bound
+        // Start/restart periodic position updates for accurate marker tracking
+        startMarkerPositionUpdates(session, store);
+    }
+    
+    /**
+     * Start periodic position updates for the marker entity
+     * Updates position every 50ms for smooth tracking
+     */
+    private void startMarkerPositionUpdates(PlaybackSession session, Store<EntityStore> store) {
+        // Cancel existing position update task if any
+        ScheduledFuture<?> existing = session.getScheduledPositionUpdate();
+        if (existing != null && !existing.isDone()) {
+            existing.cancel(false);
+        }
+        
+        // Schedule periodic position updates
+        ScheduledFuture<?> positionUpdateTask = scheduler.scheduleAtFixedRate(() -> {
+            if (!session.isPlaying()) {
+                return;
+            }
+            
+            // Execute on world thread
+            store.getExternalData().getWorld().execute(() -> {
+                updateMarkerPosition(session, store);
+            });
+        }, 0, MARKER_POSITION_UPDATE_INTERVAL_MS, TimeUnit.MILLISECONDS);
+        
+        session.setScheduledPositionUpdate(positionUpdateTask);
+    }
+    
+    /**
+     * Update marker entity position based on playback source
+     */
+    private void updateMarkerPosition(PlaybackSession session, Store<EntityStore> store) {
+        if (!session.isPlaying()) {
+            return;
+        }
+        
+        com.hypixel.hytale.component.Ref<EntityStore> marker = session.getMarkerEntity();
+        if (marker == null || !marker.isValid()) {
+            return;
+        }
+        
+        TransformComponent markerTransform = store.getComponent(marker, TransformComponent.getComponentType());
+        if (markerTransform == null) {
+            return;
+        }
+        
         if (session.isPlayerBound()) {
+            // Update position to follow player
             PlayerRef pRef = session.getPlayerRef();
             if (pRef != null && pRef.isValid()) {
                 var pEntRef = pRef.getReference();
                 if (pEntRef != null && pEntRef.isValid()) {
                     TransformComponent pTransform = store.getComponent(pEntRef, TransformComponent.getComponentType());
                     if (pTransform != null) {
-                        TransformComponent markerTransform = store.getComponent(marker,
-                                TransformComponent.getComponentType());
-                        if (markerTransform != null) {
-                            markerTransform.setPosition(pTransform.getPosition());
-                        }
+                        Vector3d playerPos = pTransform.getPosition();
+                        // Use exact player position for accurate tracking
+                        markerTransform.setPosition(playerPos);
                     }
+                }
+            }
+        } else {
+            // Update position to block center (shouldn't change, but ensure accuracy)
+            Vector3i blockPos = session.getBlockPosition();
+            if (blockPos != null) {
+                Vector3d blockCenter = new Vector3d(blockPos.getX() + 0.5, blockPos.getY() + 0.5, blockPos.getZ() + 0.5);
+                Vector3d currentPos = markerTransform.getPosition();
+                // Only update if position has drifted (more than 0.1 blocks away)
+                double distance = Math.sqrt(
+                    Math.pow(currentPos.getX() - blockCenter.getX(), 2) +
+                    Math.pow(currentPos.getY() - blockCenter.getY(), 2) +
+                    Math.pow(currentPos.getZ() - blockCenter.getZ(), 2)
+                );
+                if (distance > 0.1) {
+                    markerTransform.setPosition(blockCenter);
                 }
             }
         }
@@ -662,15 +737,17 @@ public class MediaPlaybackManager {
         long lagMs = session.getLastScheduleLagMs();
         long overlapMs = BASE_CHUNK_OVERLAP_MS + lagMs;
         overlapMs = Math.min(MAX_CHUNK_OVERLAP_MS, overlapMs);
-        long maxOverlap = Math.max(0, session.getChunkDurationMs() - 5);
+        // Use fixed chunk duration
+        int chunkDurationMs = MediaManager.CHUNK_DURATION_MS;
+        long maxOverlap = Math.max(0, chunkDurationMs - 5);
         overlapMs = Math.min(overlapMs, maxOverlap);
-        long delayMs = Math.max(0, session.getChunkDurationMs() - overlapMs);
+        long delayMs = Math.max(0, chunkDurationMs - overlapMs);
 
         ScheduledFuture<?> future = scheduler.schedule(() -> {
             if (!session.isPlaying()) {
                 return;
             }
-            long expectedEnd = session.getCurrentChunkStartMs() + session.getChunkDurationMs();
+            long expectedEnd = session.getCurrentChunkStartMs() + chunkDurationMs;
             long lag = Math.max(0, System.currentTimeMillis() - expectedEnd);
             session.setLastScheduleLagMs(lag);
             if (session.advanceChunk()) {
@@ -794,6 +871,12 @@ public class MediaPlaybackManager {
         if (session == null) {
             return;
         }
+        // Cancel position update task
+        ScheduledFuture<?> positionUpdate = session.getScheduledPositionUpdate();
+        if (positionUpdate != null && !positionUpdate.isDone()) {
+            positionUpdate.cancel(false);
+        }
+        
         if (session.isPlayerBound()) {
             PlayerRef playerRef = session.getPlayerRef();
             if (playerRef != null) {
@@ -861,6 +944,10 @@ public class MediaPlaybackManager {
         if (trackId == null || trackId.isEmpty()) {
             return;
         }
+        
+        // Cleanup batches for this track
+        batchManager.cleanupBatches(trackId);
+        
         if (isTrackActive(trackId)) {
             return;
         }
@@ -963,7 +1050,7 @@ public class MediaPlaybackManager {
                 Vector3i pos = previous.getBlockPosition();
                 if (pos != null) {
                     mediaManager.playSoundAtBlock(mediaInfo, pos,
-                            plugin.getConfig().getChunkDurationMs(), store);
+                            dev.jacobwasbeast.manager.MediaManager.CHUNK_DURATION_MS, store);
                 }
             });
         }).exceptionally(ex -> {
