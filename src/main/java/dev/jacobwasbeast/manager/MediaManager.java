@@ -563,7 +563,7 @@ public class MediaManager {
     }
     
     /**
-     * Load a sound event asset by ID
+     * Load a sound event asset by ID and send update packets to clients
      */
     public void loadSoundEventAsset(String soundEventId) {
         Path jsonPath = serverSoundEventsPath.resolve(soundEventId + ".json");
@@ -571,11 +571,22 @@ public class MediaManager {
             return;
         }
         try {
+            // Touch the file to ensure the asset system detects the change
+            try {
+                Files.setLastModifiedTime(jsonPath,
+                        java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis()));
+            } catch (IOException ignored) {
+                // Ignore if we can't touch the file
+            }
+            
+            // Reload the asset with update flag to send packets to clients
+            // The 'true' parameter forces an update even if the asset already exists
             AssetLoadResult<String, SoundEvent> result = SoundEvent.getAssetStore()
                     .loadAssetsFromPaths(RUNTIME_PACK_NAME, Collections.singletonList(jsonPath), AssetUpdateQuery.DEFAULT, true);
             if (result.hasFailed()) {
                 plugin.getLogger().at(Level.WARNING).log("SoundEvent asset failed to load: %s", soundEventId);
             }
+            // SoundEvent assets are automatically sent to clients when reloaded with update flag
         } catch (Exception e) {
             plugin.getLogger().at(Level.WARNING).withCause(e).log("Failed to load SoundEvent asset: %s", soundEventId);
         }
@@ -638,21 +649,62 @@ public class MediaManager {
         }
     }
 
+    /**
+     * Update track volume asynchronously to avoid blocking the world thread
+     */
     public void updateTrackVolume(String trackId, int chunkCount, float volumeDb) {
         if (chunkCount <= 0) {
             return;
         }
-        for (int i = 0; i < chunkCount; i++) {
-            updateChunkVolume(trackId, i, volumeDb);
-        }
-        plugin.getLogger().at(Level.INFO).log("Updated volume for %s to %.1f dB", trackId, volumeDb);
+        
+        // Run async to avoid blocking the world thread
+        CompletableFuture.runAsync(() -> {
+            // Update batch sound events for active batches (new system)
+            MediaPlaybackManager playbackManager = plugin.getPlaybackManager();
+            if (playbackManager != null && playbackManager.getBatchManager() != null) {
+                List<Integer> activeBatchIndices = playbackManager.getBatchManager().getActiveBatchIndices(trackId);
+                for (int batchIndex : activeBatchIndices) {
+                    updateBatchVolume(trackId, batchIndex, volumeDb);
+                }
+            }
+            
+            // Also update individual chunk sound events (legacy compatibility)
+            // Only update a reasonable number to avoid blocking
+            int maxChunksToUpdate = Math.min(chunkCount, 100); // Limit to prevent freeze
+            for (int i = 0; i < maxChunksToUpdate; i++) {
+                updateChunkVolume(trackId, i, volumeDb);
+            }
+            
+            plugin.getLogger().at(Level.INFO).log("Updated volume for %s to %.1f dB", trackId, volumeDb);
+        }, com.hypixel.hytale.server.core.HytaleServer.SCHEDULED_EXECUTOR);
+    }
+    
+    /**
+     * Update volume for a batch sound event and reload it (async file I/O)
+     */
+    public void updateBatchVolume(String trackId, int batchIndex, float volumeDb) {
+        String batchId = BatchPlaybackManager.getBatchId(trackId, batchIndex);
+        int[] chunkIndices = BatchPlaybackManager.getChunkIndicesForBatch(batchIndex);
+        String primarySoundFilePath = String.format("Sounds/media_radio/%s_Chunk_%03d.ogg", trackId, chunkIndices[0]);
+        
+        // Update the batch sound event JSON file
+        createBatchSoundEvent(trackId, batchIndex, primarySoundFilePath, volumeDb);
+        
+        // Reload the sound event asset to send update packets to clients
+        loadSoundEventAsset(batchId);
     }
 
+    /**
+     * Update volume for a chunk sound event and reload it (async file I/O)
+     */
     public void updateChunkVolume(String trackId, int chunkIndex, float volumeDb) {
         String chunkTrackId = String.format("%s_Chunk_%03d", trackId, chunkIndex);
         Path jsonPath = serverSoundEventsPath.resolve(chunkTrackId + ".json");
         String soundFilePath = String.format("Sounds/media_radio/%s_Chunk_%03d.ogg", trackId, chunkIndex);
         writeSoundEventConfig(jsonPath, soundFilePath, volumeDb);
+        
+        // Reload the sound event asset to send update packets to clients
+        loadSoundEventAsset(chunkTrackId);
     }
 
     private void loadSoundEventAssets(String trackId, int chunkCount) {

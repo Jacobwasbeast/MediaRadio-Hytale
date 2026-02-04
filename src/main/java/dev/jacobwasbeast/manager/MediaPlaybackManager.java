@@ -66,6 +66,13 @@ public class MediaPlaybackManager {
         this.playlistManager = plugin.getPlaylistManager();
         this.batchManager = new BatchPlaybackManager(plugin, plugin.getMediaManager());
     }
+    
+    /**
+     * Get the batch manager instance
+     */
+    public BatchPlaybackManager getBatchManager() {
+        return batchManager;
+    }
 
     /**
      * Get unique key for a block position

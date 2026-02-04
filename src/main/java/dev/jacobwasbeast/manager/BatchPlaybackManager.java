@@ -206,4 +206,24 @@ public class BatchPlaybackManager {
         trackBatchIndex.remove(trackId);
     }
     
+    /**
+     * Get all active batch IDs for a track
+     */
+    public Set<String> getActiveBatches(String trackId) {
+        Set<String> batches = activeBatches.get(trackId);
+        return batches != null ? new HashSet<>(batches) : new HashSet<>();
+    }
+    
+    /**
+     * Get batch indices for all active batches of a track
+     */
+    public List<Integer> getActiveBatchIndices(String trackId) {
+        Set<String> batchIds = getActiveBatches(trackId);
+        List<Integer> indices = new ArrayList<>();
+        for (String batchId : batchIds) {
+            indices.add(extractBatchIndex(batchId));
+        }
+        return indices;
+    }
+    
 }

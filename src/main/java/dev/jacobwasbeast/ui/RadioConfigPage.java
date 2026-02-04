@@ -123,8 +123,7 @@ public final class RadioConfigPage {
         if (builder.getById("volume-input", TextFieldBuilder.class).isPresent()) {
             builder.addEventListener("volume-input", CustomUIEventBindingType.FocusGained, (ignored, ctx) ->
                     handleAction(store, ActionData.forAction("VolumeFocusGained")));
-            builder.addEventListener("volume-input", CustomUIEventBindingType.ValueChanged, String.class, (value, ctx) ->
-                    handleAction(store, ActionData.forAction("VolumeFocusGained")));
+            // Don't trigger updates on ValueChanged - only update when focus is lost and value actually changes
             builder.addEventListener("volume-input", CustomUIEventBindingType.FocusLost, (ignored, ctx) -> {
                 ActionData data = ActionData.forAction("VolumeFocusLost");
                 data.volumeText = ctx.getValue("volume-input", String.class).orElse(null);
@@ -733,9 +732,31 @@ public final class RadioConfigPage {
             if (percentValue >= 0.0f) {
                 store.getExternalData().getWorld().execute(() -> {
                     PlaybackSession session = resolveSession();
-                    LAST_VOLUME_CHANGE_MS.put(playerRef.getUuid(), System.currentTimeMillis());
+                    var playbackManager = MediaRadioPlugin.getInstance().getPlaybackManager();
+                    
+                    // Get current volume to compare
+                    float currentPercent;
+                    if (session != null) {
+                        currentPercent = VolumeUtil.eventDbToPercent(session.getVolume());
+                    } else if (blockPos != null && playbackManager != null) {
+                        currentPercent = VolumeUtil.eventDbToPercent(playbackManager.getBlockVolume(blockPos, store));
+                    } else if (playbackManager != null) {
+                        currentPercent = VolumeUtil.eventDbToPercent(playbackManager.getPlayerVolume(playerRef.getUuid()));
+                    } else {
+                        currentPercent = VOLUME_DEFAULT_PERCENT;
+                    }
+                    
                     float nextClamped = VolumeUtil.clampPercent(percentValue);
+                    
+                    // Only update if the value actually changed (more than 0.1% difference to account for rounding)
+                    if (Math.abs(nextClamped - currentPercent) < 0.1f) {
+                        // Value hasn't changed, no need to update assets
+                        return;
+                    }
+                    
+                    LAST_VOLUME_CHANGE_MS.put(playerRef.getUuid(), System.currentTimeMillis());
                     float volDb = VolumeUtil.percentToEventDb(nextClamped);
+                    
                     if (session != null) {
                         session.setVolume(volDb);
                         var mediaManager = MediaRadioPlugin.getInstance().getMediaManager();
@@ -743,7 +764,6 @@ public final class RadioConfigPage {
                             mediaManager.updateTrackVolume(session.getTrackId(), session.getTotalChunks(), volDb);
                         }
                     }
-                    var playbackManager = MediaRadioPlugin.getInstance().getPlaybackManager();
                     if (blockPos != null && playbackManager != null) {
                         playbackManager.updateComponent(blockPos, store, component -> component.setVolume(volDb));
                     } else if (playbackManager != null) {
