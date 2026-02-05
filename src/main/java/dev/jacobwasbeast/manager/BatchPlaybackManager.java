@@ -105,20 +105,6 @@ public class BatchPlaybackManager {
                 }
             }
             
-            // Remove batches outside the window (synchronous, fast operation)
-            Set<String> toRemove = new HashSet<>();
-            for (String batchId : activeBatchIds) {
-                if (!neededBatchIds.contains(batchId)) {
-                    toRemove.add(batchId);
-                }
-            }
-            
-            for (String batchId : toRemove) {
-                unloadBatch(batchId);
-                activeBatchIds.remove(batchId);
-                batchToTrack.remove(batchId);
-            }
-            
             // Wait for all batch loads to complete (non-blocking for world thread)
             CompletableFuture.allOf(loadFutures.toArray(new CompletableFuture[0]))
                     .exceptionally(ex -> {

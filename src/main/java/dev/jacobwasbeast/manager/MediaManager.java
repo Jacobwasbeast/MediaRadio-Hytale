@@ -57,7 +57,7 @@ public class MediaManager {
     private static final int INITIAL_ASSET_BATCH = 100;
     private static final int BACKGROUND_ASSET_BATCH = 75;
     private static final long BACKGROUND_ASSET_DELAY_MS = 750L;
-    
+
     // New layered playback system constants
     public static final int CHUNK_DURATION_MS = 2000; // Fixed 2 second chunks
     public static final int LAYERS_PER_BATCH = 3; // Each batch has 3 layers
@@ -422,7 +422,7 @@ public class MediaManager {
         ProcessBuilder pb = new ProcessBuilder(
                 ffmpegCommand,
                 "-i", inputFile.toString(),
-                "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
+                "-af", "loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000",
                 "-map", "0:a:0",
                 "-f", "segment",
                 "-segment_time", String.valueOf(segmentDuration),
@@ -476,6 +476,11 @@ public class MediaManager {
         // Give watcher a moment
         Thread.sleep(1000);
 
+        // Validate chunk lengths to avoid client crashes from bad chunks
+        validateAndFixChunkLengths(trackId, chunkCount);
+        // Ensure chunks are old enough for stability checks after any re-encodes
+        Thread.sleep(CHUNK_STABILITY_GRACE_MS);
+
         plugin.getLogger().at(Level.INFO).log("Split complete. Generated %d chunks.", chunkCount);
         return chunkCount;
     }
@@ -522,28 +527,28 @@ public class MediaManager {
             plugin.getLogger().at(Level.SEVERE).withCause(e).log("Failed to write SoundEvent at %s", jsonPath);
         }
     }
-    
+
     /**
      * Create a batch sound event with 3 layers, each playing a different chunk with staggered delays
      */
     public void createBatchSoundEvent(String trackId, int batchIndex, String primarySoundFilePath, float volumeDb) {
         String batchId = BatchPlaybackManager.getBatchId(trackId, batchIndex);
         Path jsonPath = serverSoundEventsPath.resolve(batchId + ".json");
-        
+
         // Get chunk indices for this batch
         int[] chunkIndices = BatchPlaybackManager.getChunkIndicesForBatch(batchIndex);
-        
+
         // Create 3 layers, each playing a different chunk with delays
         List<Map<String, Object>> layers = new ArrayList<>();
         for (int layerIndex = 0; layerIndex < LAYERS_PER_BATCH; layerIndex++) {
             int chunkIndex = chunkIndices[layerIndex];
             String chunkSoundFilePath = String.format("Sounds/media_radio/%s_Chunk_%03d.ogg", trackId, chunkIndex);
-            
+
             Map<String, Object> layer = new HashMap<>();
             layer.put("Files", Collections.singletonList(chunkSoundFilePath));
             layer.put("Volume", VolumeUtil.percentToLayerDb(VolumeUtil.eventDbToPercent(volumeDb)));
             // Delay each layer by 2 seconds (chunk duration) for staggered playback
-            layer.put("Delay", layerIndex * CHUNK_DURATION_MS);
+            layer.put("StartDelay", layerIndex * CHUNK_DURATION_MS);
             layers.add(layer);
         }
 
@@ -561,7 +566,7 @@ public class MediaManager {
             plugin.getLogger().at(Level.SEVERE).withCause(e).log("Failed to write Batch SoundEvent at %s", jsonPath);
         }
     }
-    
+
     /**
      * Load a sound event asset by ID and send update packets to clients
      */
@@ -578,7 +583,7 @@ public class MediaManager {
             } catch (IOException ignored) {
                 // Ignore if we can't touch the file
             }
-            
+
             // Reload the asset with update flag to send packets to clients
             // The 'true' parameter forces an update even if the asset already exists
             AssetLoadResult<String, SoundEvent> result = SoundEvent.getAssetStore()
@@ -591,7 +596,7 @@ public class MediaManager {
             plugin.getLogger().at(Level.WARNING).withCause(e).log("Failed to load SoundEvent asset: %s", soundEventId);
         }
     }
-    
+
     /**
      * Ensure a chunk audio asset is registered
      */
@@ -599,6 +604,9 @@ public class MediaManager {
         String fileName = String.format("%s_Chunk_%03d.ogg", trackId, chunkIndex);
         Path chunkPath = commonAudioPath.resolve(fileName);
         if (!Files.exists(chunkPath)) {
+            return;
+        }
+        if (!isChunkFileComplete(chunkPath)) {
             return;
         }
         String assetName = "Sounds/media_radio/" + fileName;
@@ -633,6 +641,9 @@ public class MediaManager {
             if (!Files.exists(chunkPath)) {
                 continue;
             }
+            if (!isChunkFileComplete(chunkPath)) {
+                continue;
+            }
             String assetName = "Sounds/media_radio/" + fileName;
             if (CommonAssetRegistry.hasCommonAsset(assetName)) {
                 continue;
@@ -656,7 +667,7 @@ public class MediaManager {
         if (chunkCount <= 0) {
             return;
         }
-        
+
         // Run async to avoid blocking the world thread
         CompletableFuture.runAsync(() -> {
             // Update batch sound events for active batches (new system)
@@ -667,18 +678,18 @@ public class MediaManager {
                     updateBatchVolume(trackId, batchIndex, volumeDb);
                 }
             }
-            
+
             // Also update individual chunk sound events (legacy compatibility)
             // Only update a reasonable number to avoid blocking
             int maxChunksToUpdate = Math.min(chunkCount, 100); // Limit to prevent freeze
             for (int i = 0; i < maxChunksToUpdate; i++) {
                 updateChunkVolume(trackId, i, volumeDb);
             }
-            
+
             plugin.getLogger().at(Level.INFO).log("Updated volume for %s to %.1f dB", trackId, volumeDb);
         }, com.hypixel.hytale.server.core.HytaleServer.SCHEDULED_EXECUTOR);
     }
-    
+
     /**
      * Update volume for a batch sound event and reload it (async file I/O)
      */
@@ -686,10 +697,10 @@ public class MediaManager {
         String batchId = BatchPlaybackManager.getBatchId(trackId, batchIndex);
         int[] chunkIndices = BatchPlaybackManager.getChunkIndicesForBatch(batchIndex);
         String primarySoundFilePath = String.format("Sounds/media_radio/%s_Chunk_%03d.ogg", trackId, chunkIndices[0]);
-        
+
         // Update the batch sound event JSON file
         createBatchSoundEvent(trackId, batchIndex, primarySoundFilePath, volumeDb);
-        
+
         // Reload the sound event asset to send update packets to clients
         loadSoundEventAsset(batchId);
     }
@@ -702,7 +713,7 @@ public class MediaManager {
         Path jsonPath = serverSoundEventsPath.resolve(chunkTrackId + ".json");
         String soundFilePath = String.format("Sounds/media_radio/%s_Chunk_%03d.ogg", trackId, chunkIndex);
         writeSoundEventConfig(jsonPath, soundFilePath, volumeDb);
-        
+
         // Reload the sound event asset to send update packets to clients
         loadSoundEventAsset(chunkTrackId);
     }
@@ -1696,10 +1707,147 @@ public class MediaManager {
 
     private int resolveChunkCount(String trackId) {
         int chunkCount = 0;
-        while (Files.exists(commonAudioPath.resolve(String.format("%s_Chunk_%03d.ogg", trackId, chunkCount)))) {
+        while (true) {
+            Path chunkPath = commonAudioPath.resolve(String.format("%s_Chunk_%03d.ogg", trackId, chunkCount));
+            if (!Files.exists(chunkPath)) {
+                break;
+            }
+            if (!isChunkFileComplete(chunkPath)) {
+                break;
+            }
             chunkCount++;
         }
         return chunkCount;
+    }
+
+    private static final long CHUNK_STABILITY_GRACE_MS = 300;
+    private static final int TARGET_SAMPLE_RATE = 48000;
+
+    private boolean isChunkFileComplete(Path chunkPath) {
+        try {
+            long size = Files.size(chunkPath);
+            if (size <= 0) {
+                return false;
+            }
+            long lastModified = Files.getLastModifiedTime(chunkPath).toMillis();
+            long ageMs = System.currentTimeMillis() - lastModified;
+            return ageMs >= CHUNK_STABILITY_GRACE_MS;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    private void validateAndFixChunkLengths(String trackId, int chunkCount) {
+        if (chunkCount <= 0) {
+            return;
+        }
+        String ffmpegCommand;
+        try {
+            ffmpegCommand = requireFfmpegCommand();
+        } catch (Exception e) {
+            plugin.getLogger().at(Level.WARNING).withCause(e).log("ffmpeg not available; skipping chunk validation");
+            return;
+        }
+
+        long expectedSamples = Math.round((CHUNK_DURATION_MS / 1000.0) * TARGET_SAMPLE_RATE);
+        long expectedBytes = expectedSamples * 2; // s16le, mono
+
+        for (int i = 0; i < chunkCount; i++) {
+            Path chunkPath = commonAudioPath.resolve(String.format("%s_Chunk_%03d.ogg", trackId, i));
+            if (!Files.exists(chunkPath)) {
+                continue;
+            }
+            long decodedBytes = decodePcmByteCount(ffmpegCommand, chunkPath);
+            if (decodedBytes == expectedBytes) {
+                continue;
+            }
+            plugin.getLogger().at(Level.WARNING).log(
+                    "Chunk %s has unexpected decoded length: got %d bytes, expected %d. Re-encoding.",
+                    chunkPath.getFileName(), decodedBytes, expectedBytes);
+            try {
+                reencodeChunk(trackId, i, ffmpegCommand, expectedSamples);
+            } catch (Exception e) {
+                plugin.getLogger().at(Level.WARNING).withCause(e)
+                        .log("Failed to re-encode chunk %s", chunkPath.getFileName());
+            }
+        }
+    }
+
+    private long decodePcmByteCount(String ffmpegCommand, Path chunkPath) {
+        ProcessBuilder pb = new ProcessBuilder(
+                ffmpegCommand,
+                "-v", "error",
+                "-i", chunkPath.toString(),
+                "-f", "s16le",
+                "-ac", "1",
+                "-ar", String.valueOf(TARGET_SAMPLE_RATE),
+                "-");
+        pb.redirectErrorStream(true);
+        try {
+            Process process = pb.start();
+            long total = 0;
+            try (var in = process.getInputStream()) {
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = in.read(buffer)) != -1) {
+                    total += read;
+                }
+            }
+            int exitCode = process.waitFor();
+            if (exitCode != 0) {
+                return -1;
+            }
+            return total;
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
+    private void reencodeChunk(String trackId, int chunkIndex, String ffmpegCommand, long expectedSamples)
+            throws Exception {
+        Path inputFile = storagePath.resolve(trackId + ".ogg");
+        Path outputPath = commonAudioPath.resolve(String.format("%s_Chunk_%03d.ogg", trackId, chunkIndex));
+        Path tempPath = commonAudioPath.resolve(String.format("%s_Chunk_%03d.tmp.ogg", trackId, chunkIndex));
+        double startSeconds = (CHUNK_DURATION_MS / 1000.0) * chunkIndex;
+
+        String filter = String.format(
+                "loudnorm=I=-16:TP=-1.5:LRA=11,aresample=%d,asetnsamples=n=%d:p=1",
+                TARGET_SAMPLE_RATE, expectedSamples);
+
+        ProcessBuilder pb = new ProcessBuilder(
+                ffmpegCommand,
+                "-v", "error",
+                "-ss", String.valueOf(startSeconds),
+                "-t", String.valueOf(CHUNK_DURATION_MS / 1000.0),
+                "-i", inputFile.toString(),
+                "-af", filter,
+                "-ac", "1",
+                "-c:a", "libvorbis",
+                "-q:a", "4",
+                tempPath.toString());
+        pb.redirectErrorStream(true);
+        Process process = pb.start();
+        try (var in = process.getInputStream()) {
+            byte[] buffer = new byte[8192];
+            while (in.read(buffer) != -1) {
+                // drain
+            }
+        }
+        int exitCode = process.waitFor();
+        if (exitCode != 0 || !Files.exists(tempPath)) {
+            throw new RuntimeException("ffmpeg re-encode failed for chunk " + chunkIndex);
+        }
+        try {
+            Files.move(tempPath, outputPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+        } catch (IOException moveEx) {
+            Files.move(tempPath, outputPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }
+        try {
+            Files.setLastModifiedTime(outputPath,
+                    java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis()));
+        } catch (IOException ignored) {
+        }
     }
 
     public CompletableFuture<Void> deleteMediaForUrl(String url) {
