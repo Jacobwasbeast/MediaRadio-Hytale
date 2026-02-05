@@ -19,28 +19,31 @@ import java.util.logging.Level;
 public class BatchPlaybackManager {
     private final MediaRadioPlugin plugin;
     private final MediaManager mediaManager;
-    
+
     // Map of trackId -> Set of active batch IDs currently registered
     private final Map<String, Set<String>> activeBatches = new ConcurrentHashMap<>();
-    
+
     // Map of batchId -> trackId (for cleanup)
     private final Map<String, String> batchToTrack = new ConcurrentHashMap<>();
-    
+
     // Map of trackId -> current batch index
     private final Map<String, Integer> trackBatchIndex = new ConcurrentHashMap<>();
-    
+
+    // Map of trackId -> latest volume (dB) to use for newly loaded batches
+    private final Map<String, Float> trackVolumes = new ConcurrentHashMap<>();
+
     public BatchPlaybackManager(MediaRadioPlugin plugin, MediaManager mediaManager) {
         this.plugin = plugin;
         this.mediaManager = mediaManager;
     }
-    
+
     /**
      * Get unique batch ID for a track and batch index
      */
     public static String getBatchId(String trackId, int batchIndex) {
         return String.format("%s_Batch_%03d", trackId, batchIndex);
     }
-    
+
     /**
      * Get chunk indices for a batch (3 chunks per batch)
      */
@@ -52,7 +55,7 @@ public class BatchPlaybackManager {
             startChunk + 2
         };
     }
-    
+
     /**
      * Ensure batches are loaded for current playback position (async)
      * Maintains rolling window of 4 batches (24 seconds)
@@ -61,20 +64,21 @@ public class BatchPlaybackManager {
         if (trackId == null || trackId.isEmpty() || mediaManager == null) {
             return;
         }
-        
+        float effectiveVolume = trackVolumes.getOrDefault(trackId, volumeDb);
+
         // Run async to avoid blocking the world thread
         CompletableFuture.runAsync(() -> {
             // Calculate which batches we need (rolling window of 4 batches)
             int currentBatch = currentChunk / MediaManager.LAYERS_PER_BATCH;
             int startBatch = Math.max(0, currentBatch);
             int endBatch = startBatch + MediaManager.ROLLING_WINDOW_BATCHES;
-            
+
             // Check total chunks available
             int totalChunks = mediaManager.getChunkCount(trackId);
             if (totalChunks <= 0) {
                 return; // No chunks available yet
             }
-            
+
             Set<String> neededBatchIds = new HashSet<>();
             for (int batchIndex = startBatch; batchIndex < endBatch; batchIndex++) {
                 // Check if all chunks for this batch exist
@@ -90,10 +94,10 @@ public class BatchPlaybackManager {
                     neededBatchIds.add(getBatchId(trackId, batchIndex));
                 }
             }
-            
+
             // Get currently active batches for this track
             Set<String> activeBatchIds = activeBatches.computeIfAbsent(trackId, k -> new HashSet<>());
-            
+
             // Load missing batches async
             List<CompletableFuture<Void>> loadFutures = new ArrayList<>();
             for (String batchId : neededBatchIds) {
@@ -101,10 +105,10 @@ public class BatchPlaybackManager {
                     int batchIndex = extractBatchIndex(batchId);
                     activeBatchIds.add(batchId);
                     batchToTrack.put(batchId, trackId);
-                    loadFutures.add(loadBatchAsync(trackId, batchIndex, volumeDb));
+                    loadFutures.add(loadBatchAsync(trackId, batchIndex, effectiveVolume));
                 }
             }
-            
+
             // Wait for all batch loads to complete (non-blocking for world thread)
             CompletableFuture.allOf(loadFutures.toArray(new CompletableFuture[0]))
                     .exceptionally(ex -> {
@@ -113,7 +117,14 @@ public class BatchPlaybackManager {
                     });
         }, com.hypixel.hytale.server.core.HytaleServer.SCHEDULED_EXECUTOR);
     }
-    
+
+    public void setTrackVolume(String trackId, float volumeDb) {
+        if (trackId == null || trackId.isEmpty()) {
+            return;
+        }
+        trackVolumes.put(trackId, volumeDb);
+    }
+
     /**
      * Load a batch asynchronously (sound event with 3 layers)
      */
@@ -123,30 +134,30 @@ public class BatchPlaybackManager {
                 plugin.getLogger().at(Level.WARNING).log("MediaManager not available, cannot load batch");
                 return;
             }
-            
+
             int[] chunkIndices = getChunkIndicesForBatch(batchIndex);
             String batchId = getBatchId(trackId, batchIndex);
-            
+
             try {
                 // Ensure all chunk assets for this batch are registered (async file I/O)
                 for (int chunkIndex : chunkIndices) {
                     mediaManager.ensureChunkAssetRegistered(trackId, chunkIndex);
                 }
-                
+
                 // Create sound event JSON with 3 layers (uses primary chunk path for reference)
                 String primarySoundFilePath = String.format("Sounds/media_radio/%s_Chunk_%03d.ogg", trackId, chunkIndices[0]);
                 mediaManager.createBatchSoundEvent(trackId, batchIndex, primarySoundFilePath, volumeDb);
-                
+
                 // Load the sound event asset (async)
                 mediaManager.loadSoundEventAsset(batchId);
-                
+
                 plugin.getLogger().at(Level.FINE).log("Loaded batch %s for track %s", batchId, trackId);
             } catch (Exception e) {
                 plugin.getLogger().at(Level.WARNING).withCause(e).log("Failed to load batch %s for track %s", batchId, trackId);
             }
         }, com.hypixel.hytale.server.core.HytaleServer.SCHEDULED_EXECUTOR);
     }
-    
+
     /**
      * Unload a batch and remove its assets
      */
@@ -155,13 +166,13 @@ public class BatchPlaybackManager {
         if (trackId == null) {
             return;
         }
-        
+
         // Remove sound event asset silently
         CommonAssetUtil.removeCommonAssetSilent("MediaRadioRuntime", batchId);
-        
+
         plugin.getLogger().at(Level.FINE).log("Unloaded batch %s for track %s", batchId, trackId);
     }
-    
+
     /**
      * Extract batch index from batch ID
      */
@@ -177,7 +188,7 @@ public class BatchPlaybackManager {
             return 0;
         }
     }
-    
+
     /**
      * Cleanup all batches for a track
      */
@@ -191,7 +202,7 @@ public class BatchPlaybackManager {
         }
         trackBatchIndex.remove(trackId);
     }
-    
+
     /**
      * Get all active batch IDs for a track
      */
@@ -199,7 +210,7 @@ public class BatchPlaybackManager {
         Set<String> batches = activeBatches.get(trackId);
         return batches != null ? new HashSet<>(batches) : new HashSet<>();
     }
-    
+
     /**
      * Get batch indices for all active batches of a track
      */
@@ -211,5 +222,5 @@ public class BatchPlaybackManager {
         }
         return indices;
     }
-    
+
 }

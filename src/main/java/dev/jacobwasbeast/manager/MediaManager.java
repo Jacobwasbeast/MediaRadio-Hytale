@@ -673,6 +673,7 @@ public class MediaManager {
             // Update batch sound events for active batches (new system)
             MediaPlaybackManager playbackManager = plugin.getPlaybackManager();
             if (playbackManager != null && playbackManager.getBatchManager() != null) {
+                playbackManager.getBatchManager().setTrackVolume(trackId, volumeDb);
                 List<Integer> activeBatchIndices = playbackManager.getBatchManager().getActiveBatchIndices(trackId);
                 for (int batchIndex : activeBatchIndices) {
                     updateBatchVolume(trackId, batchIndex, volumeDb);
