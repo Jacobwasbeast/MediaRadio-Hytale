@@ -66,7 +66,7 @@ public class MediaPlaybackManager {
         this.playlistManager = plugin.getPlaylistManager();
         this.batchManager = new BatchPlaybackManager(plugin, plugin.getMediaManager());
     }
-    
+
     /**
      * Get the batch manager instance
      */
@@ -550,27 +550,41 @@ public class MediaPlaybackManager {
 
         String trackId = session.getTrackId();
         int chunkIndex = session.getCurrentChunk();
-        
+        int totalChunks = session.getTotalChunks();
+
         // Ensure batches are loaded for rolling window (async, non-blocking)
         float volumeDb = session.getVolume();
         batchManager.ensureBatchesLoaded(trackId, chunkIndex, volumeDb);
-        
+
         // Calculate which batch this chunk belongs to
         int currentBatch = chunkIndex / MediaManager.LAYERS_PER_BATCH;
         String batchId = BatchPlaybackManager.getBatchId(trackId, currentBatch);
-        
+        boolean fullBatchAvailable = (chunkIndex + MediaManager.LAYERS_PER_BATCH - 1) < totalChunks;
+
         // Look up batch SoundEvent and Track Model
         // We now use a single model "medradio_marker_<trackId>" for the whole track
         String trackAppearanceId = "medradio_marker_" + trackId;
 
-        SoundEvent soundEvent = SoundEvent.getAssetMap().getAsset(batchId);
         ModelAsset trackModel = ModelAsset.getAssetMap().getAsset(trackAppearanceId);
+        SoundEvent chunkSoundEvent = SoundEvent.getAssetMap()
+                .getAsset(String.format("%s_Chunk_%03d", trackId, chunkIndex));
 
-        if (soundEvent == null || trackModel == null) {
+        SoundEvent batchSoundEvent = null;
+        if (fullBatchAvailable) {
+            batchSoundEvent = SoundEvent.getAssetMap().getAsset(batchId);
+        }
+
+        if (trackModel == null || (fullBatchAvailable && batchSoundEvent == null)
+                || (!fullBatchAvailable && chunkSoundEvent == null)) {
             // Log less frequently or debug
             if (session.getMissingAssetRetries() % 5 == 0) {
-                plugin.getLogger().at(Level.WARNING).log("Batch Asset not ready: %s (Sound or Model missing)",
-                        batchId);
+                if (fullBatchAvailable) {
+                    plugin.getLogger().at(Level.WARNING).log("Batch Asset not ready: %s (Sound or Model missing)",
+                            batchId);
+                } else {
+                    plugin.getLogger().at(Level.WARNING).log("Chunk Asset not ready: %s (Sound or Model missing)",
+                            String.format("%s_Chunk_%03d", trackId, chunkIndex));
+                }
             }
             scheduleMissingAssetRetry(session, store);
             return;
@@ -659,7 +673,7 @@ public class MediaPlaybackManager {
         // Start/restart periodic position updates for accurate marker tracking
         startMarkerPositionUpdates(session, store);
     }
-    
+
     /**
      * Start periodic position updates for the marker entity
      * Updates position every 50ms for smooth tracking
@@ -670,22 +684,22 @@ public class MediaPlaybackManager {
         if (existing != null && !existing.isDone()) {
             existing.cancel(false);
         }
-        
+
         // Schedule periodic position updates
         ScheduledFuture<?> positionUpdateTask = scheduler.scheduleAtFixedRate(() -> {
             if (!session.isPlaying()) {
                 return;
             }
-            
+
             // Execute on world thread
             store.getExternalData().getWorld().execute(() -> {
                 updateMarkerPosition(session, store);
             });
         }, 0, MARKER_POSITION_UPDATE_INTERVAL_MS, TimeUnit.MILLISECONDS);
-        
+
         session.setScheduledPositionUpdate(positionUpdateTask);
     }
-    
+
     /**
      * Update marker entity position based on playback source
      */
@@ -693,17 +707,17 @@ public class MediaPlaybackManager {
         if (!session.isPlaying()) {
             return;
         }
-        
+
         com.hypixel.hytale.component.Ref<EntityStore> marker = session.getMarkerEntity();
         if (marker == null || !marker.isValid()) {
             return;
         }
-        
+
         TransformComponent markerTransform = store.getComponent(marker, TransformComponent.getComponentType());
         if (markerTransform == null) {
             return;
         }
-        
+
         if (session.isPlayerBound()) {
             // Update position to follow player
             PlayerRef pRef = session.getPlayerRef();
@@ -883,7 +897,7 @@ public class MediaPlaybackManager {
         if (positionUpdate != null && !positionUpdate.isDone()) {
             positionUpdate.cancel(false);
         }
-        
+
         if (session.isPlayerBound()) {
             PlayerRef playerRef = session.getPlayerRef();
             if (playerRef != null) {
@@ -951,10 +965,10 @@ public class MediaPlaybackManager {
         if (trackId == null || trackId.isEmpty()) {
             return;
         }
-        
+
         // Cleanup batches for this track
         batchManager.cleanupBatches(trackId);
-        
+
         if (isTrackActive(trackId)) {
             return;
         }
