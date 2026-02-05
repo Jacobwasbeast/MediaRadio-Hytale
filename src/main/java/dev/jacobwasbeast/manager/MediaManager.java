@@ -409,6 +409,7 @@ public class MediaManager {
 
     private int splitAudio(String trackId, double segmentDuration) throws Exception {
         Path inputFile = storagePath.resolve(trackId + ".ogg");
+        Path normalizedFile = storagePath.resolve(trackId + "_normalized.ogg");
         // Output pattern: trackId_Chunk_000.ogg
         String outputPattern = commonAudioPath.resolve(trackId + "_Chunk_%03d.ogg").toString();
 
@@ -419,10 +420,40 @@ public class MediaManager {
 
         String ffmpegCommand = requireFfmpegCommand();
 
-        ProcessBuilder pb = new ProcessBuilder(
+        // Normalize once on the full track to keep consistent loudness across chunks
+        ProcessBuilder normalize = new ProcessBuilder(
                 ffmpegCommand,
                 "-i", inputFile.toString(),
                 "-af", "loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000",
+                "-ac", "1",
+                "-c:a", "libvorbis",
+                "-q:a", "4",
+                normalizedFile.toString());
+        normalize.redirectErrorStream(true);
+        Process normProcess;
+        try {
+            normProcess = normalize.start();
+        } catch (IOException e) {
+            throw new RuntimeException("ffmpeg not available for audio normalize. Embedded ffmpeg failed to execute.", e);
+        }
+        try (java.util.Scanner s = new java.util.Scanner(normProcess.getInputStream()).useDelimiter("\\A")) {
+            while (s.hasNext()) {
+                s.next();
+            }
+        }
+        int normExit = normProcess.waitFor();
+        if (normExit != 0 || !Files.exists(normalizedFile)) {
+            throw new RuntimeException("ffmpeg normalization failed with code " + normExit);
+        }
+
+        String chunkFilter = String.format(
+                "aresample=%d,afade=t=in:st=0:d=0.01,afade=t=out:st=%.3f:d=0.01",
+                TARGET_SAMPLE_RATE, Math.max(0.0, (CHUNK_DURATION_MS / 1000.0) - 0.01));
+
+        ProcessBuilder pb = new ProcessBuilder(
+                ffmpegCommand,
+                "-i", normalizedFile.toString(),
+                "-af", chunkFilter,
                 "-map", "0:a:0",
                 "-f", "segment",
                 "-segment_time", String.valueOf(segmentDuration),
@@ -451,6 +482,10 @@ public class MediaManager {
         int exitCode = process.waitFor();
         if (exitCode != 0) {
             throw new RuntimeException("ffmpeg exited with code " + exitCode);
+        }
+        try {
+            Files.deleteIfExists(normalizedFile);
+        } catch (IOException ignored) {
         }
 
         // Count generated chunks
@@ -1812,8 +1847,10 @@ public class MediaManager {
         double startSeconds = (CHUNK_DURATION_MS / 1000.0) * chunkIndex;
 
         String filter = String.format(
-                "loudnorm=I=-16:TP=-1.5:LRA=11,aresample=%d,asetnsamples=n=%d:p=1",
-                TARGET_SAMPLE_RATE, expectedSamples);
+                "aresample=%d,afade=t=in:st=0:d=0.01,afade=t=out:st=%.3f:d=0.01,asetnsamples=n=%d:p=1",
+                TARGET_SAMPLE_RATE,
+                Math.max(0.0, (CHUNK_DURATION_MS / 1000.0) - 0.01),
+                expectedSamples);
 
         ProcessBuilder pb = new ProcessBuilder(
                 ffmpegCommand,
