@@ -97,7 +97,8 @@ public final class RadioConfigPage {
             handleAction(store, data);
         });
         addButtonHandler(builder, "queue-url", ctx -> {
-            ActionData data = ActionData.forAction("QueueUrl");
+            // Download (add to library) rather than queue. Playing will add-to-queue automatically.
+            ActionData data = ActionData.forAction("DownloadUrl");
             data.directUrl = ctx.getValue("url-input", String.class).orElse(null);
             handleAction(store, data);
         });
@@ -373,12 +374,36 @@ public final class RadioConfigPage {
             }
             return;
         }
-        if ("QueueAdd".equals(action) || "QueueUrl".equals(action)) {
+        if ("QueueAdd".equals(action)) {
             String url = resolveUrl(data);
             if (url != null && playlistManager != null) {
                 PlaylistManager.PlaylistItem item = resolvePlaylistItem(scopeId, url);
                 if (item != null) {
                     appendQueueItem(scopeId, item);
+                    // Queue state only live-updates on the Now tab.
+                    SELECTED_TAB.put(playerRef.getUuid(), "Now");
+                }
+            }
+            refreshUiAfterAction(store);
+            return;
+        }
+        if ("DownloadUrl".equals(action)) {
+            String url = resolveUrl(data);
+            if (url != null) {
+                SELECTED_TAB.put(playerRef.getUuid(), "Library");
+                refreshUiAfterAction(store);
+                downloadUrlToLibrary(scopeId, url, store);
+            }
+            return;
+        }
+        if ("QueueUrl".equals(action)) {
+            // Legacy action name: treat as queue (the UI button now uses DownloadUrl).
+            String url = resolveUrl(data);
+            if (url != null && playlistManager != null) {
+                PlaylistManager.PlaylistItem item = resolvePlaylistItem(scopeId, url);
+                if (item != null) {
+                    appendQueueItem(scopeId, item);
+                    SELECTED_TAB.put(playerRef.getUuid(), "Now");
                 }
             }
             refreshUiAfterAction(store);
@@ -436,10 +461,14 @@ public final class RadioConfigPage {
         if ("PlayUrl".equals(action)) {
             String url = resolveUrl(data);
             if (url != null) {
-                PlaylistManager.PlaylistItem item = resolvePlaylistItem(scopeId, url);
-                if (item != null && playlistManager != null) {
-                    playlistManager.setQueue(scopeId, List.of(item), 0, null, null);
+                // Playing a song should not clear the existing queue.
+                // Ensure the song is in the queue (so it has an index) then play it.
+                if (playlistManager != null) {
+                    int index = ensureQueuedAndSelect(scopeId, url);
+                    playlistManager.setQueueIndex(scopeId, index);
                 }
+                SELECTED_TAB.put(playerRef.getUuid(), "Now");
+                refreshUiAfterAction(store);
                 playUrlForScope(scopeId, url, store);
             }
             return;
@@ -488,6 +517,7 @@ public final class RadioConfigPage {
                         SELECTED_PLAYLIST.put(playerRef.getUuid(), playlistId);
                     }
                     playlistManager.addItem(playlistScopeId, playlistId, item);
+                    SELECTED_TAB.put(playerRef.getUuid(), "Playlists");
                 }
                 refreshUiAfterAction(store);
             }
@@ -538,6 +568,8 @@ public final class RadioConfigPage {
                         startIndex = data.index;
                     }
                     playlistManager.setQueue(scopeId, playlist.items, startIndex, playlistScopeId, playlistId);
+                    SELECTED_TAB.put(playerRef.getUuid(), "Now");
+                    refreshUiAfterAction(store);
                     if ("PlaylistPlay".equals(action) || "PlaylistItemPlay".equals(action)) {
                         playQueueIndex(scopeId, startIndex, store);
                     }
@@ -733,7 +765,7 @@ public final class RadioConfigPage {
                 store.getExternalData().getWorld().execute(() -> {
                     PlaybackSession session = resolveSession();
                     var playbackManager = MediaRadioPlugin.getInstance().getPlaybackManager();
-                    
+
                     // Get current volume to compare
                     float currentPercent;
                     if (session != null) {
@@ -745,18 +777,18 @@ public final class RadioConfigPage {
                     } else {
                         currentPercent = VOLUME_DEFAULT_PERCENT;
                     }
-                    
+
                     float nextClamped = VolumeUtil.clampPercent(percentValue);
-                    
+
                     // Only update if the value actually changed (more than 0.1% difference to account for rounding)
                     if (Math.abs(nextClamped - currentPercent) < 0.1f) {
                         // Value hasn't changed, no need to update assets
                         return;
                     }
-                    
+
                     LAST_VOLUME_CHANGE_MS.put(playerRef.getUuid(), System.currentTimeMillis());
                     float volDb = VolumeUtil.percentToEventDb(nextClamped);
-                    
+
                     if (session != null) {
                         session.setVolume(volDb);
                         var mediaManager = MediaRadioPlugin.getInstance().getMediaManager();
@@ -1169,8 +1201,20 @@ public final class RadioConfigPage {
                 PlaylistManager.PlaylistItem currentItem = queue.items.get(queue.index);
                 if (currentItem != null && sessionUrlNormalized != null
                         && sessionUrlNormalized.equals(normalizeUrl(mediaManager, currentItem.url))) {
-                    displayTitle = resolveItemTitle(currentItem);
-                    displayArtist = resolveItemArtist(currentItem);
+                    // Only override Now Playing display from the queue when it's actually meaningful.
+                    // Queue items can be placeholders (title=url) before metadata is fetched, so prefer session/library.
+                    String itemUrlNormalized = normalizeUrl(mediaManager, currentItem.url);
+                    if (currentItem.customTitle != null && !currentItem.customTitle.isEmpty()) {
+                        displayTitle = currentItem.customTitle;
+                    } else if (currentItem.title != null && !currentItem.title.isEmpty()
+                            && itemUrlNormalized != null && !currentItem.title.equals(itemUrlNormalized)) {
+                        displayTitle = currentItem.title;
+                    }
+                    if (currentItem.customArtist != null && !currentItem.customArtist.isEmpty()) {
+                        displayArtist = currentItem.customArtist;
+                    } else if (currentItem.artist != null && !currentItem.artist.isEmpty()) {
+                        displayArtist = currentItem.artist;
+                    }
                     String icon = resolveItemIcon(currentItem, mediaManager);
                     if (icon != null && !icon.isEmpty()) {
                         displayThumb = icon;
@@ -1720,6 +1764,82 @@ public final class RadioConfigPage {
         playlistManager.setQueue(scopeId, items, index, sourceScopeId, sourcePlaylistId);
     }
 
+    private int ensureQueuedAndSelect(String scopeId, String url) {
+        PlaylistManager playlistManager = MediaRadioPlugin.getInstance().getPlaylistManager();
+        if (playlistManager == null || url == null || url.isEmpty()) {
+            return 0;
+        }
+        var mediaManager = MediaRadioPlugin.getInstance().getMediaManager();
+        String normalized = mediaManager != null ? mediaManager.normalizeUrl(url) : url;
+
+        PlaylistManager.QueueState queue = playlistManager.getQueue(scopeId);
+        if (queue != null && queue.items != null) {
+            for (int i = 0; i < queue.items.size(); i++) {
+                PlaylistManager.PlaylistItem existing = queue.items.get(i);
+                if (existing != null && normalized.equals(normalizeUrl(mediaManager, existing.url))) {
+                    return i;
+                }
+            }
+        }
+
+        List<PlaylistManager.PlaylistItem> items = new ArrayList<>();
+        if (queue != null && queue.items != null) {
+            items.addAll(queue.items);
+        }
+        items.add(resolvePlaylistItem(scopeId, normalized));
+
+        String sourceScopeId = queue != null ? queue.sourceScopeId : null;
+        String sourcePlaylistId = queue != null ? queue.sourcePlaylistId : null;
+        int newIndex = items.size() - 1;
+        playlistManager.setQueue(scopeId, items, newIndex, sourceScopeId, sourcePlaylistId);
+        return newIndex;
+    }
+
+    private void downloadUrlToLibrary(String scopeId, String url, Store<EntityStore> store) {
+        if (url == null || url.isEmpty() || store == null || store.getExternalData() == null
+                || store.getExternalData().getWorld() == null) {
+            return;
+        }
+        var mediaManager = MediaRadioPlugin.getInstance().getMediaManager();
+        if (mediaManager == null) {
+            return;
+        }
+        String normalized = mediaManager.normalizeUrl(url);
+        var library = MediaRadioPlugin.getInstance().getMediaLibrary();
+        if (library != null) {
+            library.upsertSongStatus(scopeId, normalized, "Downloading...", null, null, null, 0, null, null);
+        }
+        mediaManager.requestMedia(normalized).thenAccept(mediaInfo -> {
+            store.getExternalData().getWorld().execute(() -> {
+                if (library != null) {
+                    library.upsertSongStatus(
+                            scopeId,
+                            mediaInfo.url,
+                            "Ready",
+                            mediaInfo.title,
+                            mediaInfo.artist,
+                            mediaInfo.thumbnailUrl,
+                            mediaInfo.duration,
+                            mediaInfo.trackId,
+                            mediaInfo.thumbnailAssetPath);
+                }
+                if (isRadioConfigStillOpen(playerRef, store)) {
+                    refreshUiAfterAction(store);
+                }
+            });
+        }).exceptionally(ex -> {
+            store.getExternalData().getWorld().execute(() -> {
+                if (library != null) {
+                    library.upsertSongStatus(scopeId, normalized, "Failed", null, null, null, 0, null, null);
+                }
+                if (isRadioConfigStillOpen(playerRef, store)) {
+                    refreshUiAfterAction(store);
+                }
+            });
+            return null;
+        });
+    }
+
     private void removeQueueIndex(String scopeId, int index) {
         PlaylistManager playlistManager = MediaRadioPlugin.getInstance().getPlaylistManager();
         if (playlistManager == null) {
@@ -1798,6 +1918,9 @@ public final class RadioConfigPage {
                             mediaInfo.duration,
                             mediaInfo.trackId,
                             mediaInfo.thumbnailAssetPath);
+                }
+                if (isRadioConfigStillOpen(playerRef, store)) {
+                    refreshUiAfterAction(store);
                 }
                 if (blockPos != null) {
                     mediaManager.playSoundAtBlock(mediaInfo, blockPos,

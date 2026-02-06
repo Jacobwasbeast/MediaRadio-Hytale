@@ -1061,17 +1061,55 @@ public class MediaPlaybackManager {
         }
         mediaManager.requestMedia(item.url).thenAccept(mediaInfo -> {
             store.getExternalData().getWorld().execute(() -> {
+                if (library != null && scopeId != null && !scopeId.isEmpty()) {
+                    library.upsertSongStatus(
+                            scopeId,
+                            mediaInfo.url,
+                            "Preparing...",
+                            mediaInfo.title,
+                            mediaInfo.artist,
+                            mediaInfo.thumbnailUrl,
+                            mediaInfo.duration,
+                            mediaInfo.trackId,
+                            mediaInfo.thumbnailAssetPath);
+                }
                 if (previous.isPlayerBound()) {
                     PlayerRef playerRef = previous.getPlayerRef();
                     if (playerRef != null) {
-                        mediaManager.playSound(mediaInfo, playerRef, store);
+                        mediaManager.playSound(mediaInfo, playerRef, store).thenRun(() -> {
+                            if (library != null && scopeId != null && !scopeId.isEmpty()) {
+                                library.upsertSongStatus(
+                                        scopeId,
+                                        mediaInfo.url,
+                                        "Playing",
+                                        mediaInfo.title,
+                                        mediaInfo.artist,
+                                        mediaInfo.thumbnailUrl,
+                                        mediaInfo.duration,
+                                        mediaInfo.trackId,
+                                        mediaInfo.thumbnailAssetPath);
+                            }
+                        });
                         return;
                     }
                 }
                 Vector3i pos = previous.getBlockPosition();
                 if (pos != null) {
                     mediaManager.playSoundAtBlock(mediaInfo, pos,
-                            dev.jacobwasbeast.manager.MediaManager.CHUNK_DURATION_MS, store);
+                            dev.jacobwasbeast.manager.MediaManager.CHUNK_DURATION_MS, store).thenRun(() -> {
+                        if (library != null && scopeId != null && !scopeId.isEmpty()) {
+                            library.upsertSongStatus(
+                                    scopeId,
+                                    mediaInfo.url,
+                                    "Playing",
+                                    mediaInfo.title,
+                                    mediaInfo.artist,
+                                    mediaInfo.thumbnailUrl,
+                                    mediaInfo.duration,
+                                    mediaInfo.trackId,
+                                    mediaInfo.thumbnailAssetPath);
+                        }
+                    });
                 }
             });
         }).exceptionally(ex -> {
