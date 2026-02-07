@@ -1182,81 +1182,111 @@
                                 data-hyui-default-label-style="@mediabtnlabelcenter"
                                 data-hyui-hovered-label-style="@mediabtnlabelcenter"
                                 data-hyui-pressed-label-style="@mediabtnlabelcenter"
-                                style="anchor-width: 90; anchor-height: 30"
+                                style="anchor-width: 90; anchor-height: 40"
                             >
                                 {{$playlistBackLabel}}
                             </button>
                             <div
                                 class="column"
                                 data-hyui-flexweight="1"
-                                style="padding: 0 0 0 10; layout-mode: Top"
+                                style="
+                                    padding: 0;
+                                    layout-mode: Top;
+                                    min-width: 0;
+                                "
                             >
                                 <p
                                     class="label-title"
-                                    style="font-size: 14; padding: 0; margin: 0"
+                                    style="
+                                        font-size: 16;
+                                        padding: 0;
+                                        margin: 0;
+                                        text-align: center;
+                                    "
                                 >
                                     {{$selectedPlaylistHeader}}
                                 </p>
                                 <p
                                     class="subtle"
                                     style="
-                                        font-size: 11;
+                                        font-size: 12;
                                         padding: 2 0 0 0;
                                         margin: 0;
+                                        text-align: center;
                                     "
                                 >
                                     {{$selectedPlaylistCount}}
                                 </p>
                             </div>
-                            <button
-                                id="playlist-edit-toggle"
-                                class="custom-textbutton"
-                                data-hyui-default-bg="@MediaBtnDefault"
-                                data-hyui-hovered-bg="@MediaBtnHover"
-                                data-hyui-pressed-bg="@MediaBtnPressed"
-                                data-hyui-default-label-style="@mediabtnlabelcenter"
-                                data-hyui-hovered-label-style="@mediabtnlabelcenter"
-                                data-hyui-pressed-label-style="@mediabtnlabelcenter"
-                                style="anchor-width: 90; anchor-height: 30"
+                            <div
+                                class="row"
+                                style="padding: 0; anchor-height: 40"
                             >
-                                {{$playlistEditToggleLabel}}
-                            </button>
-                        </div>
-
-                        <div
-                            class="row"
-                            style="padding: 8 0 0 0; anchor-width: 600"
-                        >
-                            <button
-                                id="playlist-append"
-                                class="custom-textbutton"
-                                data-hyui-default-bg="@MediaBtnDefault"
-                                data-hyui-hovered-bg="@MediaBtnHover"
-                                data-hyui-pressed-bg="@MediaBtnPressed"
-                                data-hyui-default-label-style="@mediabtnlabelcenter"
-                                data-hyui-hovered-label-style="@mediabtnlabelcenter"
-                                data-hyui-pressed-label-style="@mediabtnlabelcenter"
-                                style="anchor-width: 180; anchor-height: 30"
-                            >
-                                {{$appendPlaylistLabel}}
-                            </button>
-                            <button
-                                id="playlist-play"
-                                class="custom-textbutton"
-                                data-hyui-default-bg="@MediaBtnDefault"
-                                data-hyui-hovered-bg="@MediaBtnHover"
-                                data-hyui-pressed-bg="@MediaBtnPressed"
-                                data-hyui-default-label-style="@mediabtnlabelcenter"
-                                data-hyui-hovered-label-style="@mediabtnlabelcenter"
-                                data-hyui-pressed-label-style="@mediabtnlabelcenter"
-                                style="
-                                    anchor-left: 6;
-                                    anchor-width: 180;
-                                    anchor-height: 30;
-                                "
-                            >
-                                {{$playPlaylistLabel}}
-                            </button>
+                                <button
+                                    id="playlist-append"
+                                    class="custom-button"
+                                    data-hyui-default-bg="@MediaBtnDefault"
+                                    data-hyui-hovered-bg="@MediaBtnHover"
+                                    data-hyui-pressed-bg="@MediaBtnPressed"
+                                    style="
+                                        anchor-width: 80;
+                                        anchor-height: 40;
+                                        layout-mode: Center;
+                                    "
+                                >
+                                    <img
+                                        src="MediaRadio/Icons/queue.png"
+                                        width="16"
+                                        height="16"
+                                    />
+                                </button>
+                                <button
+                                    id="playlist-play"
+                                    class="custom-button"
+                                    data-hyui-default-bg="@MediaBtnDefault"
+                                    data-hyui-hovered-bg="@MediaBtnHover"
+                                    data-hyui-pressed-bg="@MediaBtnPressed"
+                                    style="
+                                        anchor-left: 6;
+                                        anchor-width: 80;
+                                        anchor-height: 40;
+                                        layout-mode: Center;
+                                    "
+                                >
+                                    <img
+                                        src="MediaRadio/Icons/play.png"
+                                        width="16"
+                                        height="16"
+                                    />
+                                </button>
+                                <button
+                                    id="playlist-edit-toggle"
+                                    class="custom-button"
+                                    data-hyui-default-bg="@MediaBtnDefault"
+                                    data-hyui-hovered-bg="@MediaBtnHover"
+                                    data-hyui-pressed-bg="@MediaBtnPressed"
+                                    style="
+                                        anchor-left: 6;
+                                        anchor-width: 46;
+                                        anchor-height: 40;
+                                        layout-mode: Center;
+                                    "
+                                >
+                                    {{#if playlistEditMode}}
+                                    <img
+                                        src="MediaRadio/Icons/stop.png"
+                                        width="16"
+                                        height="16"
+                                    />
+                                    {{else}}
+                                    <img
+                                        src="MediaRadio/Icons/edit.png"
+                                        width="16"
+                                        height="16"
+                                    />
+                                    {{/if}}
+                                </button>
+                            </div>
                         </div>
 
                         {{#if playlistEditMode}}
