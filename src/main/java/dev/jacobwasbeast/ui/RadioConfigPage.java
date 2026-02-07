@@ -55,6 +55,8 @@ public final class RadioConfigPage {
     private static final Map<UUID, String> SELECTED_PLAYLIST = new ConcurrentHashMap<>();
     private static final Map<UUID, String> PLAYLIST_SOURCE = new ConcurrentHashMap<>();
     private static final Map<UUID, String> EDITING_SONG_URL = new ConcurrentHashMap<>();
+    private static final Map<UUID, String> PLAYLISTS_VIEW = new ConcurrentHashMap<>(); // "List" | "Detail"
+    private static final Map<UUID, Boolean> PLAYLIST_EDIT_MODE = new ConcurrentHashMap<>();
 
     private final PlayerRef playerRef;
     @Nullable
@@ -135,6 +137,8 @@ public final class RadioConfigPage {
         addButtonHandler(builder, "volume-down", ctx -> handleAction(store, ActionData.forAction("VolumeDown")));
 
         addButtonHandler(builder, "playlist-new", ctx -> handleAction(store, ActionData.forAction("PlaylistNew")));
+        addButtonHandler(builder, "playlist-back", ctx -> handleAction(store, ActionData.forAction("PlaylistBack")));
+        addButtonHandler(builder, "playlist-edit-toggle", ctx -> handleAction(store, ActionData.forAction("PlaylistEditToggle")));
         addButtonHandler(builder, "playlist-save", ctx -> {
             ActionData data = ActionData.forAction("PlaylistSave");
             data.name = ctx.getValue("playlist-name", String.class).orElse(null);
@@ -145,6 +149,7 @@ public final class RadioConfigPage {
         addButtonHandler(builder, "playlist-delete", ctx -> handleAction(store, ActionData.forAction("PlaylistDelete")));
         addButtonHandler(builder, "playlist-load", ctx -> handleAction(store, ActionData.forAction("PlaylistLoad")));
         addButtonHandler(builder, "playlist-play", ctx -> handleAction(store, ActionData.forAction("PlaylistPlay")));
+        addButtonHandler(builder, "playlist-append", ctx -> handleAction(store, ActionData.forAction("PlaylistAppend")));
 
         addButtonHandler(builder, "song-edit-save", ctx -> {
             ActionData data = ActionData.forAction("SongEditSave");
@@ -217,12 +222,22 @@ public final class RadioConfigPage {
                 data.playlistId = item.playlistId;
                 handleAction(store, data);
             });
+            addButtonHandler(builder, item.playId, ctx -> {
+                ActionData data = ActionData.forAction("PlaylistPlayFromList");
+                data.playlistId = item.playlistId;
+                handleAction(store, data);
+            });
         }
 
         for (PlaylistItemView item : model.playlistItems) {
             int index = item.index;
             addButtonHandler(builder, item.playId, ctx -> {
                 ActionData data = ActionData.forAction("PlaylistItemPlay");
+                data.index = index;
+                handleAction(store, data);
+            });
+            addButtonHandler(builder, item.queueId, ctx -> {
+                ActionData data = ActionData.forAction("PlaylistItemQueue");
                 data.index = index;
                 handleAction(store, data);
             });
@@ -291,6 +306,7 @@ public final class RadioConfigPage {
         }
         if ("TabPlaylists".equals(action)) {
             SELECTED_TAB.put(playerRef.getUuid(), "Playlists");
+            PLAYLISTS_VIEW.putIfAbsent(playerRef.getUuid(), "List");
             refreshUiAfterAction(store);
             return;
         }
@@ -476,14 +492,34 @@ public final class RadioConfigPage {
         if ("SelectPlaylist".equals(action)) {
             if (data.playlistId != null && !data.playlistId.isEmpty()) {
                 SELECTED_PLAYLIST.put(playerRef.getUuid(), data.playlistId);
+                PLAYLISTS_VIEW.put(playerRef.getUuid(), "Detail");
+                PLAYLIST_EDIT_MODE.remove(playerRef.getUuid());
                 refreshUiAfterAction(store);
             }
+            return;
+        }
+        if ("PlaylistBack".equals(action)) {
+            PLAYLISTS_VIEW.put(playerRef.getUuid(), "List");
+            PLAYLIST_EDIT_MODE.remove(playerRef.getUuid());
+            refreshUiAfterAction(store);
+            return;
+        }
+        if ("PlaylistEditToggle".equals(action)) {
+            boolean next = !Boolean.TRUE.equals(PLAYLIST_EDIT_MODE.get(playerRef.getUuid()));
+            if (next) {
+                PLAYLIST_EDIT_MODE.put(playerRef.getUuid(), true);
+            } else {
+                PLAYLIST_EDIT_MODE.remove(playerRef.getUuid());
+            }
+            refreshUiAfterAction(store);
             return;
         }
         if ("PlaylistNew".equals(action)) {
             if (playlistManager != null) {
                 PlaylistManager.Playlist playlist = playlistManager.createPlaylist(playlistScopeId, "New Playlist");
                 SELECTED_PLAYLIST.put(playerRef.getUuid(), playlist.id);
+                PLAYLISTS_VIEW.put(playerRef.getUuid(), "Detail");
+                PLAYLIST_EDIT_MODE.put(playerRef.getUuid(), true);
                 refreshUiAfterAction(store);
             }
             return;
@@ -491,7 +527,29 @@ public final class RadioConfigPage {
         if ("PlaylistSave".equals(action)) {
             if (playlistManager != null) {
                 String playlistId = SELECTED_PLAYLIST.get(playerRef.getUuid());
-                playlistManager.updatePlaylist(playlistScopeId, playlistId, data.name, data.description, data.icon);
+                String rawIcon = data.icon != null ? data.icon.trim() : null;
+                // If an HTTP URL is provided, download it into a local UI asset and store the asset path on the playlist.
+                if (rawIcon != null && !rawIcon.isEmpty() && isHttpUrl(rawIcon)) {
+                    playlistManager.updatePlaylist(playlistScopeId, playlistId, data.name, data.description, null);
+                    var mediaManager = MediaRadioPlugin.getInstance().getMediaManager();
+                    if (mediaManager != null && playlistId != null && !playlistId.isEmpty()) {
+                        // Use a unique ID so the asset path changes; otherwise the UI/common-asset registry can keep
+                        // serving the old bytes when a user replaces an existing playlist icon.
+                        String playlistThumbId = "playlist_" + playlistId + "_" + Long.toHexString(System.currentTimeMillis());
+                        mediaManager.ensureCustomThumbnailFromUrlAsync(rawIcon, playlistThumbId, true).thenAccept(assetPath -> {
+                            if (assetPath == null || assetPath.isEmpty()) {
+                                return;
+                            }
+                            playlistManager.updatePlaylist(playlistScopeId, playlistId, null, null, assetPath);
+                            refreshUiAfterAction(store);
+                        });
+                    }
+                    refreshUiAfterAction(store);
+                    return;
+                }
+
+                // Otherwise treat it as either an asset path, or blank (clear).
+                playlistManager.updatePlaylist(playlistScopeId, playlistId, data.name, data.description, rawIcon);
                 refreshUiAfterAction(store);
             }
             return;
@@ -501,6 +559,8 @@ public final class RadioConfigPage {
                 String playlistId = SELECTED_PLAYLIST.get(playerRef.getUuid());
                 playlistManager.deletePlaylist(playlistScopeId, playlistId);
                 SELECTED_PLAYLIST.remove(playerRef.getUuid());
+                PLAYLISTS_VIEW.put(playerRef.getUuid(), "List");
+                PLAYLIST_EDIT_MODE.remove(playerRef.getUuid());
                 refreshUiAfterAction(store);
             }
             return;
@@ -518,6 +578,7 @@ public final class RadioConfigPage {
                     }
                     playlistManager.addItem(playlistScopeId, playlistId, item);
                     SELECTED_TAB.put(playerRef.getUuid(), "Playlists");
+                    PLAYLISTS_VIEW.put(playerRef.getUuid(), "Detail");
                 }
                 refreshUiAfterAction(store);
             }
@@ -572,6 +633,53 @@ public final class RadioConfigPage {
                     refreshUiAfterAction(store);
                     if ("PlaylistPlay".equals(action) || "PlaylistItemPlay".equals(action)) {
                         playQueueIndex(scopeId, startIndex, store);
+                    }
+                }
+            }
+            return;
+        }
+        if ("PlaylistAppend".equals(action)) {
+            if (playlistManager != null) {
+                String playlistId = SELECTED_PLAYLIST.get(playerRef.getUuid());
+                PlaylistManager.Playlist playlist = playlistManager.getPlaylist(playlistScopeId, playlistId);
+                if (playlist != null && playlist.items != null && !playlist.items.isEmpty()) {
+                    PlaylistManager.QueueState queue = playlistManager.getQueue(scopeId);
+                    List<PlaylistManager.PlaylistItem> items = new ArrayList<>();
+                    if (queue != null && queue.items != null) {
+                        items.addAll(queue.items);
+                    }
+                    items.addAll(playlist.items);
+                    int index = queue != null ? queue.index : 0;
+                    playlistManager.setQueue(scopeId, items, index, playlistScopeId, playlistId);
+                    SELECTED_TAB.put(playerRef.getUuid(), "Now");
+                    refreshUiAfterAction(store);
+                }
+            }
+            return;
+        }
+        if ("PlaylistPlayFromList".equals(action)) {
+            if (playlistManager != null && data.playlistId != null && !data.playlistId.isEmpty()) {
+                PlaylistManager.Playlist playlist = playlistManager.getPlaylist(playlistScopeId, data.playlistId);
+                if (playlist != null && playlist.items != null && !playlist.items.isEmpty()) {
+                    SELECTED_PLAYLIST.put(playerRef.getUuid(), data.playlistId);
+                    playlistManager.setQueue(scopeId, playlist.items, 0, playlistScopeId, data.playlistId);
+                    SELECTED_TAB.put(playerRef.getUuid(), "Now");
+                    refreshUiAfterAction(store);
+                    playQueueIndex(scopeId, 0, store);
+                }
+            }
+            return;
+        }
+        if ("PlaylistItemQueue".equals(action)) {
+            if (playlistManager != null && data.index != null) {
+                String playlistId = SELECTED_PLAYLIST.get(playerRef.getUuid());
+                PlaylistManager.Playlist playlist = playlistManager.getPlaylist(playlistScopeId, playlistId);
+                if (playlist != null && playlist.items != null && data.index >= 0 && data.index < playlist.items.size()) {
+                    PlaylistManager.PlaylistItem item = playlist.items.get(data.index);
+                    if (item != null) {
+                        appendQueueItem(scopeId, resolvePlaylistItem(scopeId, item.url));
+                        SELECTED_TAB.put(playerRef.getUuid(), "Now");
+                        refreshUiAfterAction(store);
                     }
                 }
             }
@@ -951,8 +1059,23 @@ public final class RadioConfigPage {
         vars.put("playlistNameLabel", "Playlist Name");
         vars.put("newPlaylistLabel", "New");
         vars.put("deletePlaylistLabel", "Delete");
-        vars.put("loadPlaylistLabel", "Load to Queue");
-        vars.put("playPlaylistLabel", "Play Playlist");
+        vars.put("loadPlaylistLabel", "Replace Queue");
+        vars.put("appendPlaylistLabel", "Add to Queue");
+        vars.put("playPlaylistLabel", "Play");
+        vars.put("playlistBackLabel", "Back");
+        boolean playlistEditMode = Boolean.TRUE.equals(PLAYLIST_EDIT_MODE.get(playerRef.getUuid()));
+        vars.put("playlistEditMode", playlistEditMode);
+        vars.put("playlistEditToggleLabel", playlistEditMode ? "Done" : "Edit");
+
+        String playlistsView = PLAYLISTS_VIEW.getOrDefault(playerRef.getUuid(), "List");
+        boolean playlistsViewDetail = "Detail".equals(playlistsView) && selectedPlaylist != null;
+        boolean playlistsViewList = !playlistsViewDetail;
+        vars.put("playlistsViewList", playlistsViewList);
+        vars.put("playlistsViewDetail", playlistsViewDetail);
+        vars.put("selectedPlaylistHeader",
+                selectedPlaylist != null && selectedPlaylist.name != null ? selectedPlaylist.name : "Playlist");
+        int selectedCount = selectedPlaylist != null && selectedPlaylist.items != null ? selectedPlaylist.items.size() : 0;
+        vars.put("selectedPlaylistCount", selectedCount + " songs");
         vars.put("selectLabel", "Select");
         vars.put("setIconLabel", "Set Icon");
         vars.put("songTitleLabel", "Song Title");
@@ -1023,11 +1146,14 @@ public final class RadioConfigPage {
                 int count = playlist.items != null ? playlist.items.size() : 0;
                 view.count = count + " songs";
                 view.selectLabel = "Open";
+                view.playLabel = "Play";
                 String icon = playlist.iconAssetPath;
                 if ((icon == null || icon.isEmpty()) && playlist.items != null && !playlist.items.isEmpty()) {
                     icon = resolveItemIcon(playlist.items.get(0), mediaManager);
                 }
-                view.icon = (icon == null || icon.isEmpty()) ? DEFAULT_IMAGE : icon;
+                // Playlist icons are stored as asset paths (often prefixed with UI/Custom/).
+                // Normalize to the UI-relative path before binding into <img src="...">.
+                view.icon = (icon == null || icon.isEmpty()) ? DEFAULT_IMAGE : normalizeUiAssetPath(icon);
                 playlists.add(view);
             }
         }
@@ -1053,6 +1179,7 @@ public final class RadioConfigPage {
                     view.thumb = DEFAULT_IMAGE;
                 }
                 view.playLabel = "Play";
+                view.queueLabelShort = "Queue";
                 view.upLabel = "Up";
                 view.downLabel = "Dn";
                 view.removeLabel = "Del";
@@ -1088,6 +1215,8 @@ public final class RadioConfigPage {
         if (selectedPlaylist != null) {
             vars.put("playlistName", selectedPlaylist.name != null ? selectedPlaylist.name : "");
             vars.put("playlistDescription", selectedPlaylist.description != null ? selectedPlaylist.description : "");
+            // Keep the stored value (asset path) visible in the field so "Save" is stable.
+            // If the user pastes an HTTP URL, PlaylistSave will download it and replace this with an asset path.
             vars.put("playlistIcon", selectedPlaylist.iconAssetPath != null ? selectedPlaylist.iconAssetPath : "");
         } else {
             vars.put("playlistName", "");
@@ -2150,11 +2279,14 @@ public final class RadioConfigPage {
         private String count;
         private String icon;
         private String selectLabel;
+        private String playLabel;
         private final String selectId;
+        private final String playId;
 
         private PlaylistView() {
             String id = UUID.randomUUID().toString().replace("-", "");
             this.selectId = "playlist-select-" + id;
+            this.playId = "playlist-play-" + id;
         }
     }
 
@@ -2164,10 +2296,12 @@ public final class RadioConfigPage {
         private String title;
         private String artist;
         private String playLabel;
+        private String queueLabelShort;
         private String upLabel;
         private String downLabel;
         private String removeLabel;
         private final String playId;
+        private final String queueId;
         private final String upId;
         private final String downId;
         private final String removeId;
@@ -2175,6 +2309,7 @@ public final class RadioConfigPage {
         private PlaylistItemView(int index) {
             this.index = index;
             this.playId = "playlist-item-play-" + index;
+            this.queueId = "playlist-item-queue-" + index;
             this.upId = "playlist-item-up-" + index;
             this.downId = "playlist-item-down-" + index;
             this.removeId = "playlist-item-remove-" + index;
