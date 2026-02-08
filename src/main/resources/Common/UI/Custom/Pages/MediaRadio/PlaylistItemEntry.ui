@@ -1,0 +1,75 @@
+$C = "../../Common.ui";
+
+Group {
+  LayoutMode: Left;
+  Background: $C.@InputBoxBackground;
+  FlexWeight: 1;
+  Padding: (Left: 8, Top: 6, Bottom: 6, Right: 6);
+  Anchor: (Height: 56);
+
+  AssetImage #PlaylistItemThumb {
+    Anchor: (Width: 32, Height: 32);
+  }
+
+  Group { Anchor: (Width: 8); }
+
+  Group {
+    LayoutMode: Top;
+    FlexWeight: 1;
+
+    Label #PlaylistItemTitle {
+        Text: "%mediaRadio.customUI.songTitle";
+        Style: LabelStyle(
+            TextColor: #FFFFFF,
+            FontSize: 13,
+            RenderBold: true
+        );
+    }
+
+    Label #PlaylistItemArtist {
+        Text: "%mediaRadio.customUI.artistName";
+        Style: LabelStyle(
+            TextColor: #C8C8C8,
+            FontSize: 11
+        );
+    }
+  }
+
+  $C.@SmallSecondaryTextButton #PlaylistItemPlay {
+      Text: %mediaRadio.customUI.play;
+      Anchor: (Width: 60);
+      Padding: (Horizontal: 6);
+  }
+
+  Group { Anchor: (Width: 4); }
+
+  $C.@SmallSecondaryTextButton #PlaylistItemUp {
+      Text: "Up";
+      Anchor: (Width: 32);
+      Padding: (Horizontal: 6);
+  }
+
+  Group { Anchor: (Width: 4); }
+
+  $C.@SmallSecondaryTextButton #PlaylistItemDown {
+      Text: "Down";
+      Anchor: (Width: 40);
+      Padding: (Horizontal: 6);
+  }
+
+  Group { Anchor: (Width: 4); }
+
+  $C.@SmallSecondaryTextButton #PlaylistItemIcon {
+      Text: %mediaRadio.customUI.setIcon;
+      Anchor: (Width: 80);
+      Padding: (Horizontal: 6);
+  }
+
+  Group { Anchor: (Width: 4); }
+
+  $C.@SmallSecondaryTextButton #PlaylistItemRemove {
+      Text: %mediaRadio.customUI.remove;
+      Anchor: (Width: 70);
+      Padding: (Horizontal: 6);
+  }
+}

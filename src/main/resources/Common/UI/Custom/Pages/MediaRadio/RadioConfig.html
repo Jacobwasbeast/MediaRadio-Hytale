@@ -1,0 +1,1606 @@
+<style>
+    .section-title {
+        color: #b9cbe0;
+        font-size: 13;
+        font-weight: bold;
+    }
+    .subtle {
+        color: #9fb2c8;
+        font-size: 12;
+    }
+    .label-light {
+        color: #c9d6e5;
+        font-size: 12;
+    }
+    .label-title {
+        color: #ffffff;
+        font-size: 16;
+        font-weight: bold;
+    }
+    .card {
+        background-color: #0d1a2b(0.65);
+        padding: 10 12;
+    }
+    .now-playing-thumb-wrap {
+        background-color: #0d1a2b(0.65);
+        padding: 0;
+    }
+    .list-thumb-wrap {
+        background-color: #0d1a2b(0.65);
+        padding: 0;
+    }
+    .now-playing-thumb-wrap img,
+    .list-thumb-wrap img,
+    .thumb-no-pad img {
+        padding: 0;
+        margin: 0;
+    }
+    .panel {
+        background-color: #0a1422(0.75);
+        padding: 10 12;
+    }
+    .panel-title {
+        color: #b8c8da;
+        font-size: 13;
+        font-weight: bold;
+    }
+    .list-item {
+        background-color: #0f1f33(0.7);
+        padding: 6 8;
+    }
+    .divider {
+        background-color: #263850(0.7);
+    }
+    .controls-bar {
+        background-color: #0c1626(0.7);
+        padding: 8 8 6 8;
+    }
+    .row {
+        layout-mode: Left;
+    }
+    .column {
+        layout-mode: Top;
+    }
+    @mediabtndefault {
+        background-image: url("MediaRadio/Buttons/MediaBtn_Default.png");
+        background-color: rgba(70, 90, 120, 0.75);
+    }
+    @mediabtnhover {
+        background-image: url("MediaRadio/Buttons/MediaBtn_Hover.png");
+        background-color: rgba(90, 115, 150, 0.8);
+    }
+    @mediabtnpressed {
+        background-image: url("MediaRadio/Buttons/MediaBtn_Pressed.png");
+        background-color: rgba(55, 75, 105, 0.9);
+    }
+    @mediabtnlabel {
+        color: #dfe7f1;
+        font-size: 12;
+        font-weight: bold;
+        white-space: nowrap;
+        text-transform: none;
+        letter-spacing: 0;
+        outline-color: rgba(0, 0, 0, 0.45);
+    }
+    @mediabtnlabelcenter {
+        color: #dfe7f1;
+        font-size: 12;
+        font-weight: bold;
+        text-align: middlecenter;
+        vertical-align: center;
+        horizontal-align: center;
+        white-space: nowrap;
+        text-transform: none;
+        letter-spacing: 0;
+        outline-color: rgba(0, 0, 0, 0.45);
+    }
+    @mediabtnlabelcentersmall {
+        color: #dfe7f1;
+        font-size: 11;
+        font-weight: bold;
+        text-align: middlecenter;
+        vertical-align: center;
+        horizontal-align: center;
+        white-space: nowrap;
+        text-transform: none;
+        letter-spacing: 0;
+        outline-color: rgba(0, 0, 0, 0.45);
+    }
+</style>
+<div class="page-overlay">
+    <div
+        class="decorated-container"
+        data-hyui-title="{{$title}}"
+        style="anchor-width: 640; anchor-height: 720"
+    >
+        <div class="container-contents">
+            <div
+                class="column"
+                style="
+                    layout-mode: Top;
+                    padding: 0 6 6 6;
+                    anchor-width: 620;
+                    anchor-height: 640;
+                "
+            >
+                <div
+                    class="column"
+                    data-hyui-flexweight="1"
+                    style="layout-mode: Top; padding: 0; min-height: 0"
+                >
+                    <div
+                        class="row"
+                        style="padding: 2 0 0 10; anchor-width: 600"
+                    >
+                        <button
+                            id="tab-now"
+                            class="custom-textbutton"
+                            data-hyui-default-bg="@MediaBtnDefault"
+                            data-hyui-hovered-bg="@MediaBtnHover"
+                            data-hyui-pressed-bg="@MediaBtnPressed"
+                            data-hyui-default-label-style="@mediabtnlabelcenter"
+                            data-hyui-hovered-label-style="@mediabtnlabelcenter"
+                            data-hyui-pressed-label-style="@mediabtnlabelcenter"
+                        >
+                            {{$tabNowLabel}}
+                        </button>
+                        <button
+                            id="tab-library"
+                            class="custom-textbutton"
+                            data-hyui-default-bg="@MediaBtnDefault"
+                            data-hyui-hovered-bg="@MediaBtnHover"
+                            data-hyui-pressed-bg="@MediaBtnPressed"
+                            data-hyui-default-label-style="@mediabtnlabelcenter"
+                            data-hyui-hovered-label-style="@mediabtnlabelcenter"
+                            data-hyui-pressed-label-style="@mediabtnlabelcenter"
+                            style="anchor-left: 6"
+                        >
+                            {{$tabLibraryLabel}}
+                        </button>
+                        <button
+                            id="tab-playlists"
+                            class="custom-textbutton"
+                            data-hyui-default-bg="@MediaBtnDefault"
+                            data-hyui-hovered-bg="@MediaBtnHover"
+                            data-hyui-pressed-bg="@MediaBtnPressed"
+                            data-hyui-default-label-style="@mediabtnlabelcenter"
+                            data-hyui-hovered-label-style="@mediabtnlabelcenter"
+                            data-hyui-pressed-label-style="@mediabtnlabelcenter"
+                            style="anchor-left: 6"
+                        >
+                            {{$tabPlaylistsLabel}}
+                        </button>
+                    </div>
+
+                    {{#if tabNow}}
+                    <div
+                        class="panel"
+                        style="
+                            anchor-width: 600;
+                            anchor-height: 190;
+                            margin-left: 10;
+                        "
+                    >
+                        <div
+                            style="
+                                layout-mode: Left;
+                                anchor-width: 576;
+                                vertical-align: top;
+                            "
+                        >
+                            <div
+                                class="now-playing-thumb-wrap"
+                                style="
+                                    anchor-width: 96;
+                                    anchor-height: 96;
+                                    layout-mode: Top;
+                                "
+                            >
+                                <img
+                                    id="now-thumb"
+                                    src="{{$nowThumb}}"
+                                    width="96"
+                                    height="96"
+                                />
+                            </div>
+                            <div style="anchor-width: 28"></div>
+                            <div
+                                class="column"
+                                data-hyui-flexweight="1"
+                                style="
+                                    padding: 0;
+                                    layout-mode: Top;
+                                    min-width: 0;
+                                "
+                            >
+                                <div
+                                    style="anchor-height: 40; layout-mode: Top"
+                                ></div>
+                                <p
+                                    id="now-title"
+                                    class="label-title"
+                                    style="
+                                        font-size: 16;
+                                        padding: 0;
+                                        margin: 0;
+                                        white-space: normal;
+                                    "
+                                >
+                                    {{$nowTitle}}
+                                </p>
+                                <p
+                                    id="now-artist"
+                                    class="label-light"
+                                    style="padding: 4 0 0 0; margin: 0"
+                                >
+                                    {{$nowArtist}}
+                                </p>
+                                <div
+                                    class="row"
+                                    style="padding: 10 0 0 0; anchor-width: 448"
+                                >
+                                    <p
+                                        id="now-time"
+                                        class="subtle"
+                                        style="
+                                            anchor-width: 110;
+                                            padding: 0;
+                                            margin: 0;
+                                        "
+                                    >
+                                        {{$nowTime}}
+                                    </p>
+                                    <input
+                                        id="seek-slider"
+                                        type="range"
+                                        min="0"
+                                        max="100"
+                                        step="1"
+                                        value="{{$seekValue}}"
+                                        style="
+                                            anchor-width: 320;
+                                            anchor-height: 6;
+                                        "
+                                    />
+                                </div>
+                                <div
+                                    class="row"
+                                    style="padding: 10 0 0 0; anchor-width: 448"
+                                >
+                                    <div
+                                        class="column"
+                                        style="
+                                            anchor-width: 70;
+                                            padding: 0;
+                                            margin: 0;
+                                        "
+                                    >
+                                        <p
+                                            class="subtle"
+                                            style="padding: 0; margin: 0"
+                                        >
+                                            {{$volumeLabel}}
+                                        </p>
+                                        <p
+                                            class="subtle"
+                                            style="
+                                                font-size: 11;
+                                                padding: 2 0 0 0;
+                                                margin: 0;
+                                            "
+                                        >
+                                            {{$volumeHint}}
+                                        </p>
+                                    </div>
+                                    <input
+                                        id="volume-input"
+                                        type="text"
+                                        value="{{$volumeValue}}"
+                                        placeholder="100"
+                                        style="
+                                            anchor-width: 50;
+                                            anchor-height: 20;
+                                        "
+                                    />
+                                    <button
+                                        id="volume-down"
+                                        class="custom-textbutton"
+                                        data-hyui-default-bg="@MediaBtnDefault"
+                                        data-hyui-hovered-bg="@MediaBtnHover"
+                                        data-hyui-pressed-bg="@MediaBtnPressed"
+                                        data-hyui-default-label-style="@mediabtnlabelcenter"
+                                        data-hyui-hovered-label-style="@mediabtnlabelcenter"
+                                        data-hyui-pressed-label-style="@mediabtnlabelcenter"
+                                        style="
+                                            anchor-left: 4;
+                                            anchor-width: 26;
+                                            anchor-height: 20;
+                                        "
+                                    >
+                                        -
+                                    </button>
+                                    <button
+                                        id="volume-up"
+                                        class="custom-textbutton"
+                                        data-hyui-default-bg="@MediaBtnDefault"
+                                        data-hyui-hovered-bg="@MediaBtnHover"
+                                        data-hyui-pressed-bg="@MediaBtnPressed"
+                                        data-hyui-default-label-style="@mediabtnlabelcenter"
+                                        data-hyui-hovered-label-style="@mediabtnlabelcenter"
+                                        data-hyui-pressed-label-style="@mediabtnlabelcenter"
+                                        style="
+                                            anchor-left: 4;
+                                            anchor-width: 26;
+                                            anchor-height: 20;
+                                        "
+                                    >
+                                        +
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div
+                        class="controls-bar"
+                        style="
+                            layout-mode: Top;
+                            anchor-width: 600;
+                            anchor-height: 86;
+                        "
+                    >
+                        <div
+                            class="row"
+                            style="anchor-width: 584; anchor-height: 34"
+                        >
+                            <div style="anchor-width: 140"></div>
+                            <button
+                                id="loop-button"
+                                class="custom-button"
+                                data-hyui-default-bg="@MediaBtnDefault"
+                                data-hyui-hovered-bg="@MediaBtnHover"
+                                data-hyui-pressed-bg="@MediaBtnPressed"
+                                style="
+                                    anchor-width: 52;
+                                    anchor-height: 34;
+                                    layout-mode: Center;
+                                "
+                            >
+                                <img
+                                    src="MediaRadio/Icons/loop.png"
+                                    width="18"
+                                    height="18"
+                                />
+                            </button>
+                            <div style="anchor-width: 6"></div>
+                            <button
+                                id="prev-button"
+                                class="custom-button"
+                                data-hyui-default-bg="@MediaBtnDefault"
+                                data-hyui-hovered-bg="@MediaBtnHover"
+                                data-hyui-pressed-bg="@MediaBtnPressed"
+                                style="
+                                    anchor-width: 52;
+                                    anchor-height: 34;
+                                    layout-mode: Center;
+                                "
+                            >
+                                <img
+                                    src="MediaRadio/Icons/prev.png"
+                                    width="18"
+                                    height="18"
+                                />
+                            </button>
+                            <div style="anchor-width: 6"></div>
+                            <button
+                                id="play-pause-button"
+                                class="custom-button"
+                                data-hyui-default-bg="@MediaBtnDefault"
+                                data-hyui-hovered-bg="@MediaBtnHover"
+                                data-hyui-pressed-bg="@MediaBtnPressed"
+                                style="
+                                    anchor-width: 52;
+                                    anchor-height: 34;
+                                    layout-mode: Center;
+                                "
+                            >
+                                <img
+                                    id="play-pause-icon"
+                                    src="{{$playPauseIcon}}"
+                                    width="18"
+                                    height="18"
+                                />
+                            </button>
+                            <div style="anchor-width: 6"></div>
+                            <button
+                                id="stop-button"
+                                class="custom-button"
+                                data-hyui-default-bg="@MediaBtnDefault"
+                                data-hyui-hovered-bg="@MediaBtnHover"
+                                data-hyui-pressed-bg="@MediaBtnPressed"
+                                style="
+                                    anchor-width: 52;
+                                    anchor-height: 34;
+                                    layout-mode: Center;
+                                "
+                            >
+                                <img
+                                    src="MediaRadio/Icons/stop.png"
+                                    width="18"
+                                    height="18"
+                                />
+                            </button>
+                            <div style="anchor-width: 6"></div>
+                            <button
+                                id="next-button"
+                                class="custom-button"
+                                data-hyui-default-bg="@MediaBtnDefault"
+                                data-hyui-hovered-bg="@MediaBtnHover"
+                                data-hyui-pressed-bg="@MediaBtnPressed"
+                                style="
+                                    anchor-width: 52;
+                                    anchor-height: 34;
+                                    layout-mode: Center;
+                                "
+                            >
+                                <img
+                                    src="MediaRadio/Icons/next.png"
+                                    width="18"
+                                    height="18"
+                                />
+                            </button>
+                            <div style="anchor-width: 6"></div>
+                            <button
+                                id="shuffle-button"
+                                class="custom-button"
+                                data-hyui-default-bg="@MediaBtnDefault"
+                                data-hyui-hovered-bg="@MediaBtnHover"
+                                data-hyui-pressed-bg="@MediaBtnPressed"
+                                style="
+                                    anchor-width: 52;
+                                    anchor-height: 34;
+                                    layout-mode: Center;
+                                "
+                            >
+                                <img
+                                    src="MediaRadio/Icons/shuffle.png"
+                                    width="18"
+                                    height="18"
+                                />
+                            </button>
+                        </div>
+                        <div
+                            class="row"
+                            style="
+                                padding: 6 0 0 0;
+                                anchor-width: 584;
+                                anchor-height: 32;
+                            "
+                        >
+                            <div style="anchor-width: 140"></div>
+                            <p
+                                id="loop-label"
+                                class="subtle"
+                                style="anchor-width: 130; anchor-height: 32"
+                            >
+                                {{$loopLabel}}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div
+                        class="panel"
+                        style="anchor-width: 600; anchor-height: 258"
+                    >
+                        <p class="section-title" style="padding: 0 0 6 0">
+                            {{$queueLabel}}
+                        </p>
+                        <div
+                            style="
+                                layout-mode: TopScrolling;
+                                anchor-width: 576;
+                                anchor-height: 210;
+                                padding: 2;
+                            "
+                        >
+                            {{#each queueItems}}
+                            <div
+                                class="row list-item"
+                                style="
+                                    anchor-height: 72;
+                                    anchor-width: 560;
+                                    vertical-align: top;
+                                "
+                            >
+                                <div
+                                    class="thumb-no-pad"
+                                    style="
+                                        anchor-width: 72;
+                                        anchor-height: 48;
+                                        layout-mode: Top;
+                                        padding: 0 4 0 20;
+                                    "
+                                >
+                                    <img
+                                        src="{{$thumb}}"
+                                        width="48"
+                                        height="48"
+                                    />
+                                </div>
+                                <div
+                                    class="column"
+                                    data-hyui-flexweight="1"
+                                    style="padding: 0 0 0 8; layout-mode: Top"
+                                >
+                                    <div
+                                        style="
+                                            anchor-height: 6;
+                                            layout-mode: Top;
+                                        "
+                                    ></div>
+                                    <p
+                                        class="label-title"
+                                        style="
+                                            font-size: 14;
+                                            padding: 0;
+                                            margin: 0;
+                                        "
+                                    >
+                                        {{$title}}
+                                    </p>
+                                    <p
+                                        class="label-light"
+                                        style="padding: 2 0 0 0; margin: 0"
+                                    >
+                                        {{$artist}}
+                                    </p>
+                                    <p
+                                        id="{{$statusId}}"
+                                        class="subtle"
+                                        style="
+                                            font-size: 11;
+                                            padding: 2 0 0 0;
+                                            margin: 0;
+                                        "
+                                    >
+                                        {{$status}}
+                                    </p>
+                                </div>
+                                <div
+                                    style="
+                                        layout-mode: Left;
+                                        anchor-width: 160;
+                                        anchor-height: 30;
+                                    "
+                                >
+                                    <button
+                                        id="{{$playId}}"
+                                        class="custom-button"
+                                        data-hyui-default-bg="@MediaBtnDefault"
+                                        data-hyui-hovered-bg="@MediaBtnHover"
+                                        data-hyui-pressed-bg="@MediaBtnPressed"
+                                        style="
+                                            anchor-width: 36;
+                                            anchor-height: 30;
+                                            layout-mode: Center;
+                                        "
+                                    >
+                                        <img
+                                            src="MediaRadio/Icons/play.png"
+                                            width="16"
+                                            height="16"
+                                        />
+                                    </button>
+                                    <button
+                                        id="{{$upId}}"
+                                        class="custom-button"
+                                        data-hyui-default-bg="@MediaBtnDefault"
+                                        data-hyui-hovered-bg="@MediaBtnHover"
+                                        data-hyui-pressed-bg="@MediaBtnPressed"
+                                        style="
+                                            anchor-left: 4;
+                                            anchor-width: 32;
+                                            anchor-height: 30;
+                                            layout-mode: Center;
+                                        "
+                                    >
+                                        <img
+                                            src="MediaRadio/Icons/up.png"
+                                            width="14"
+                                            height="14"
+                                        />
+                                    </button>
+                                    <button
+                                        id="{{$downId}}"
+                                        class="custom-button"
+                                        data-hyui-default-bg="@MediaBtnDefault"
+                                        data-hyui-hovered-bg="@MediaBtnHover"
+                                        data-hyui-pressed-bg="@MediaBtnPressed"
+                                        style="
+                                            anchor-left: 4;
+                                            anchor-width: 32;
+                                            anchor-height: 30;
+                                            layout-mode: Center;
+                                        "
+                                    >
+                                        <img
+                                            src="MediaRadio/Icons/down.png"
+                                            width="14"
+                                            height="14"
+                                        />
+                                    </button>
+                                    <button
+                                        id="{{$removeId}}"
+                                        class="custom-button"
+                                        data-hyui-default-bg="@MediaBtnDefault"
+                                        data-hyui-hovered-bg="@MediaBtnHover"
+                                        data-hyui-pressed-bg="@MediaBtnPressed"
+                                        style="
+                                            anchor-left: 4;
+                                            anchor-width: 36;
+                                            anchor-height: 30;
+                                            layout-mode: Center;
+                                        "
+                                    >
+                                        <img
+                                            src="MediaRadio/Icons/trash.png"
+                                            width="14"
+                                            height="14"
+                                        />
+                                    </button>
+                                </div>
+                            </div>
+                            {{/each}}
+                        </div>
+                    </div>
+                    {{/if}}{{#if tabLibrary}} {{#if showSongEdit}}
+                    <div
+                        class="panel"
+                        style="
+                            layout-mode: Top;
+                            anchor-width: 600;
+                            padding: 10;
+                            margin-left: 10;
+                            anchor-height: 190;
+                        "
+                    >
+                        <p
+                            class="section-title"
+                            style="
+                                padding: 0;
+                                margin: 0;
+                                anchor-top: 0;
+                                anchor-height: 16;
+                            "
+                        >
+                            {{$editSongLabel}}
+                        </p>
+                        <input
+                            id="song-edit-title"
+                            type="text"
+                            value="{{$songEditTitle}}"
+                            placeholder="{{$songTitleLabel}}"
+                            style="
+                                anchor-height: 26;
+                                anchor-top: 22;
+                                anchor-left: 0;
+                                anchor-right: 0;
+                            "
+                        />
+                        <input
+                            id="song-edit-artist"
+                            type="text"
+                            value="{{$songEditArtist}}"
+                            placeholder="{{$songArtistLabel}}"
+                            style="
+                                anchor-height: 26;
+                                anchor-top: 54;
+                                anchor-left: 0;
+                                anchor-right: 0;
+                            "
+                        />
+                        <input
+                            id="song-edit-description"
+                            type="text"
+                            value="{{$songEditDescription}}"
+                            placeholder="{{$descriptionLabel}}"
+                            style="
+                                anchor-height: 26;
+                                anchor-top: 86;
+                                anchor-left: 0;
+                                anchor-right: 0;
+                            "
+                        />
+                        <input
+                            id="song-edit-icon"
+                            type="text"
+                            value="{{$songEditIcon}}"
+                            placeholder="{{$iconLabel}}"
+                            style="
+                                anchor-height: 26;
+                                anchor-top: 118;
+                                anchor-left: 0;
+                                anchor-right: 0;
+                            "
+                        />
+                        <div
+                            class="row"
+                            style="
+                                padding: 0;
+                                anchor-top: 150;
+                                anchor-height: 30;
+                                layout-mode: Left;
+                            "
+                        >
+                            <button
+                                id="song-edit-save"
+                                class="custom-textbutton"
+                                data-hyui-default-bg="@MediaBtnDefault"
+                                data-hyui-hovered-bg="@MediaBtnHover"
+                                data-hyui-pressed-bg="@MediaBtnPressed"
+                                data-hyui-default-label-style="@mediabtnlabelcenter"
+                                data-hyui-hovered-label-style="@mediabtnlabelcenter"
+                                data-hyui-pressed-label-style="@mediabtnlabelcenter"
+                                style="anchor-width: 80"
+                            >
+                                {{$saveLabel}}
+                            </button>
+                            <button
+                                id="song-edit-cancel"
+                                class="custom-textbutton"
+                                data-hyui-default-bg="@MediaBtnDefault"
+                                data-hyui-hovered-bg="@MediaBtnHover"
+                                data-hyui-pressed-bg="@MediaBtnPressed"
+                                data-hyui-default-label-style="@mediabtnlabelcenter"
+                                data-hyui-hovered-label-style="@mediabtnlabelcenter"
+                                data-hyui-pressed-label-style="@mediabtnlabelcenter"
+                                style="anchor-left: 6; anchor-width: 140"
+                            >
+                                {{$cancelLabel}}
+                            </button>
+                        </div>
+                    </div>
+                    {{else}}
+                    <div class="column" style="padding: 0; margin-left: 10">
+                        <div class="row" style="padding: 0; anchor-width: 600">
+                            <div
+                                class="column"
+                                data-hyui-flexweight="0"
+                                style="padding: 0 8 0 0"
+                            >
+                                <input
+                                    id="url-input"
+                                    type="text"
+                                    value="{{$urlValue}}"
+                                    placeholder="{{$urlPlaceholder}}"
+                                    style="anchor-width: 420; anchor-height: 40"
+                                />
+                            </div>
+                            <div
+                                class="row"
+                                style="
+                                    padding: 0 0 0 6;
+                                    anchor-height: 40;
+                                    vertical-align: top;
+                                "
+                            >
+                                <button
+                                    id="play-url"
+                                    class="custom-button"
+                                    data-hyui-default-bg="@MediaBtnDefault"
+                                    data-hyui-hovered-bg="@MediaBtnHover"
+                                    data-hyui-pressed-bg="@MediaBtnPressed"
+                                    style="
+                                        anchor-width: 46;
+                                        anchor-height: 40;
+                                        anchor-left: 25;
+                                        layout-mode: Center;
+                                    "
+                                >
+                                    <img
+                                        src="MediaRadio/Icons/play.png"
+                                        width="16"
+                                        height="16"
+                                    />
+                                </button>
+                                <button
+                                    id="queue-url"
+                                    class="custom-button"
+                                    data-hyui-default-bg="@MediaBtnDefault"
+                                    data-hyui-hovered-bg="@MediaBtnHover"
+                                    data-hyui-pressed-bg="@MediaBtnPressed"
+                                    style="
+                                        anchor-left: 6;
+                                        anchor-width: 46;
+                                        anchor-height: 40;
+                                        layout-mode: Center;
+                                    "
+                                >
+                                    <img
+                                        src="MediaRadio/Icons/down.png"
+                                        width="16"
+                                        height="16"
+                                    />
+                                </button>
+                            </div>
+                        </div>
+                        <div style="padding: 6 0 0 20; anchor-left: 8">
+                            <p class="subtle" style="padding: 1; margin: 0">
+                                {{$playlistTarget}}
+                            </p>
+                        </div>
+                    </div>
+                    <div
+                        class="divider"
+                        style="
+                            anchor-width: 600;
+                            anchor-height: 1;
+                            margin-top: 10;
+                            margin-left: 10;
+                        "
+                    ></div>
+                    <div
+                        style="
+                            layout-mode: Left;
+                            anchor-width: 600;
+                            margin-left: 10;
+                        "
+                    >
+                        <p
+                            class="section-title"
+                            style="padding: 8 0 0 0; margin: 0"
+                        >
+                            {{$libraryLabel}}
+                        </p>
+                    </div>
+                    <div
+                        style="
+                            layout-mode: TopScrolling;
+                            anchor-width: 600;
+                            anchor-height: 460;
+                            padding: 4;
+                            margin-left: 10;
+                        "
+                    >
+                        {{#each libraryItems}}
+                        <div
+                            class="row list-item"
+                            style="
+                                anchor-height: 82;
+                                anchor-width: 580;
+                                margin-top: 6;
+                                vertical-align: top;
+                            "
+                        >
+                            <div
+                                class="list-thumb-wrap"
+                                style="
+                                    anchor-width: 74;
+                                    anchor-height: 54;
+                                    layout-mode: Top;
+                                    padding: 0 4 0 20;
+                                "
+                            >
+                                <img src="{{$thumb}}" width="54" height="54" />
+                            </div>
+                            <div
+                                class="column"
+                                data-hyui-flexweight="1"
+                                style="padding: 0 0 0 10; layout-mode: Top"
+                            >
+                                <div
+                                    style="anchor-height: 10; layout-mode: Top"
+                                ></div>
+                                <p
+                                    class="label-title"
+                                    style="font-size: 14; padding: 0; margin: 0"
+                                >
+                                    {{$title}}
+                                </p>
+                                <p
+                                    class="label-light"
+                                    style="padding: 2 0 0 0; margin: 0"
+                                >
+                                    {{$artist}}
+                                </p>
+                                <p
+                                    class="subtle"
+                                    style="
+                                        font-size: 11;
+                                        padding: 2 0 0 0;
+                                        margin: 0;
+                                    "
+                                >
+                                    {{$status}}
+                                </p>
+                            </div>
+                            <div
+                                class="column"
+                                style="anchor-width: 122; layout-mode: Top"
+                            >
+                                <div
+                                    style="anchor-height: 10; layout-mode: Top"
+                                ></div>
+                                <div class="row">
+                                    <button
+                                        id="{{$playId}}"
+                                        class="custom-button"
+                                        data-hyui-default-bg="@MediaBtnDefault"
+                                        data-hyui-hovered-bg="@MediaBtnHover"
+                                        data-hyui-pressed-bg="@MediaBtnPressed"
+                                        style="
+                                            anchor-width: 34;
+                                            anchor-height: 30;
+                                            layout-mode: Center;
+                                        "
+                                    >
+                                        <img
+                                            src="MediaRadio/Icons/play.png"
+                                            width="14"
+                                            height="14"
+                                        />
+                                    </button>
+                                    <button
+                                        id="{{$queueId}}"
+                                        class="custom-button"
+                                        data-hyui-default-bg="@MediaBtnDefault"
+                                        data-hyui-hovered-bg="@MediaBtnHover"
+                                        data-hyui-pressed-bg="@MediaBtnPressed"
+                                        style="
+                                            anchor-left: 4;
+                                            anchor-width: 34;
+                                            anchor-height: 30;
+                                            layout-mode: Center;
+                                        "
+                                    >
+                                        <img
+                                            src="MediaRadio/Icons/queue.png"
+                                            width="16"
+                                            height="16"
+                                        />
+                                    </button>
+                                    <button
+                                        id="{{$addId}}"
+                                        class="custom-button"
+                                        data-hyui-default-bg="@MediaBtnDefault"
+                                        data-hyui-hovered-bg="@MediaBtnHover"
+                                        data-hyui-pressed-bg="@MediaBtnPressed"
+                                        style="
+                                            anchor-left: 4;
+                                            anchor-width: 34;
+                                            anchor-height: 30;
+                                            layout-mode: Center;
+                                        "
+                                    >
+                                        <img
+                                            src="MediaRadio/Icons/add.png"
+                                            width="16"
+                                            height="16"
+                                        />
+                                    </button>
+                                </div>
+                                <div class="row" style="padding: 4 0 0 0">
+                                    <button
+                                        id="{{$editId}}"
+                                        class="custom-button"
+                                        data-hyui-default-bg="@MediaBtnDefault"
+                                        data-hyui-hovered-bg="@MediaBtnHover"
+                                        data-hyui-pressed-bg="@MediaBtnPressed"
+                                        style="
+                                            anchor-width: 34;
+                                            anchor-height: 30;
+                                            layout-mode: Center;
+                                        "
+                                    >
+                                        <img
+                                            src="MediaRadio/Icons/edit.png"
+                                            width="16"
+                                            height="16"
+                                        />
+                                    </button>
+                                    <button
+                                        id="{{$removeId}}"
+                                        class="custom-button"
+                                        data-hyui-default-bg="@MediaBtnDefault"
+                                        data-hyui-hovered-bg="@MediaBtnHover"
+                                        data-hyui-pressed-bg="@MediaBtnPressed"
+                                        style="
+                                            anchor-left: 4;
+                                            anchor-width: 34;
+                                            anchor-height: 30;
+                                            layout-mode: Center;
+                                        "
+                                    >
+                                        <img
+                                            src="MediaRadio/Icons/trash.png"
+                                            width="16"
+                                            height="16"
+                                        />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        {{/each}}
+                    </div>
+                    {{/if}} {{/if}} {{#if tabPlaylists}} {{#if
+                    showSourceToggle}}
+                    <div class="row" style="padding: 4 0 0 0">
+                        <button
+                            id="source-boombox"
+                            class="custom-textbutton"
+                            data-hyui-default-bg="@MediaBtnDefault"
+                            data-hyui-hovered-bg="@MediaBtnHover"
+                            data-hyui-pressed-bg="@MediaBtnPressed"
+                            data-hyui-default-label-style="@mediabtnlabelcenter"
+                            data-hyui-hovered-label-style="@mediabtnlabelcenter"
+                            data-hyui-pressed-label-style="@mediabtnlabelcenter"
+                            style="anchor-width: 150"
+                        >
+                            {{$sourceBoomboxLabel}}
+                        </button>
+                        <button
+                            id="source-player"
+                            class="custom-textbutton"
+                            data-hyui-default-bg="@MediaBtnDefault"
+                            data-hyui-hovered-bg="@MediaBtnHover"
+                            data-hyui-pressed-bg="@MediaBtnPressed"
+                            data-hyui-default-label-style="@mediabtnlabelcenter"
+                            data-hyui-hovered-label-style="@mediabtnlabelcenter"
+                            data-hyui-pressed-label-style="@mediabtnlabelcenter"
+                            style="anchor-left: 6; anchor-width: 160"
+                        >
+                            {{$sourcePlayerLabel}}
+                        </button>
+                    </div>
+                    {{/if}}
+
+                    <div
+                        class="divider"
+                        style="
+                            anchor-width: 600;
+                            anchor-height: 1;
+                            margin-top: 10;
+                        "
+                    ></div>
+
+                    {{#if playlistsViewList}}
+                    <div
+                        class="column"
+                        style="padding: 8 0 0 0; anchor-width: 600"
+                    >
+                        <div class="row" style="anchor-width: 600">
+                            <p
+                                class="section-title"
+                                style="padding: 0; margin: 0"
+                            >
+                                {{$playlistsLabel}}
+                            </p>
+                            <button
+                                id="playlist-new"
+                                class="custom-textbutton"
+                                data-hyui-default-bg="@MediaBtnDefault"
+                                data-hyui-hovered-bg="@MediaBtnHover"
+                                data-hyui-pressed-bg="@MediaBtnPressed"
+                                data-hyui-default-label-style="@mediabtnlabelcenter"
+                                data-hyui-hovered-label-style="@mediabtnlabelcenter"
+                                data-hyui-pressed-label-style="@mediabtnlabelcenter"
+                                style="
+                                    anchor-left: 8;
+                                    anchor-width: 140;
+                                    anchor-height: 30;
+                                "
+                            >
+                                {{$newPlaylistLabel}}
+                            </button>
+                        </div>
+                        <p
+                            class="subtle"
+                            style="font-size: 11; padding: 2 0 6 0"
+                        >
+                            {{$playlistTarget}}
+                        </p>
+                        <div
+                            style="
+                                layout-mode: TopScrolling;
+                                anchor-width: 600;
+                                anchor-height: 500;
+                                padding: 4;
+                            "
+                        >
+                            {{#each playlists}}
+                            <div
+                                class="row list-item"
+                                style="anchor-height: 60; vertical-align: top"
+                            >
+                                <div
+                                    class="list-thumb-wrap"
+                                    style="
+                                        anchor-width: 42;
+                                        anchor-height: 36;
+                                        layout-mode: Top;
+                                        padding: 0 2 0 6;
+                                    "
+                                >
+                                    <img
+                                        src="{{$icon}}"
+                                        width="36"
+                                        height="36"
+                                    />
+                                </div>
+                                <div
+                                    class="column"
+                                    data-hyui-flexweight="1"
+                                    style="
+                                        padding: 0 0 0 4;
+                                        layout-mode: Top;
+                                        min-width: 0;
+                                    "
+                                >
+                                    <div
+                                        style="
+                                            anchor-height: 6;
+                                            layout-mode: Top;
+                                        "
+                                    ></div>
+                                    <p
+                                        class="label-title"
+                                        style="
+                                            font-size: 13;
+                                            padding: 0;
+                                            margin: 0;
+                                        "
+                                    >
+                                        {{$name}}
+                                    </p>
+                                    <p
+                                        class="subtle"
+                                        style="
+                                            font-size: 11;
+                                            padding: 2 0 0 0;
+                                            margin: 0;
+                                        "
+                                    >
+                                        {{$count}}
+                                    </p>
+                                </div>
+                                <button
+                                    id="{{$playId}}"
+                                    class="custom-button"
+                                    data-hyui-default-bg="@MediaBtnDefault"
+                                    data-hyui-hovered-bg="@MediaBtnHover"
+                                    data-hyui-pressed-bg="@MediaBtnPressed"
+                                    style="
+                                        anchor-width: 36;
+                                        anchor-height: 30;
+                                        layout-mode: Center;
+                                    "
+                                >
+                                    <img
+                                        src="MediaRadio/Icons/play.png"
+                                        width="14"
+                                        height="14"
+                                    />
+                                </button>
+                                <button
+                                    id="{{$selectId}}"
+                                    class="custom-textbutton"
+                                    data-hyui-default-bg="@MediaBtnDefault"
+                                    data-hyui-hovered-bg="@MediaBtnHover"
+                                    data-hyui-pressed-bg="@MediaBtnPressed"
+                                    data-hyui-default-label-style="@mediabtnlabelcentersmall"
+                                    data-hyui-hovered-label-style="@mediabtnlabelcentersmall"
+                                    data-hyui-pressed-label-style="@mediabtnlabelcentersmall"
+                                    style="
+                                        anchor-left: 6;
+                                        anchor-width: 90;
+                                        anchor-height: 30;
+                                    "
+                                >
+                                    {{$selectLabel}}
+                                </button>
+                            </div>
+                            {{/each}}
+                        </div>
+                    </div>
+                    {{else}}
+                    <div
+                        class="column"
+                        style="padding: 8 0 0 0; anchor-width: 600"
+                    >
+                        <div
+                            class="row"
+                            style="anchor-width: 600; vertical-align: top"
+                        >
+                            <button
+                                id="playlist-back"
+                                class="custom-textbutton"
+                                data-hyui-default-bg="@MediaBtnDefault"
+                                data-hyui-hovered-bg="@MediaBtnHover"
+                                data-hyui-pressed-bg="@MediaBtnPressed"
+                                data-hyui-default-label-style="@mediabtnlabelcenter"
+                                data-hyui-hovered-label-style="@mediabtnlabelcenter"
+                                data-hyui-pressed-label-style="@mediabtnlabelcenter"
+                                style="anchor-width: 90; anchor-height: 40"
+                            >
+                                {{$playlistBackLabel}}
+                            </button>
+                            <div
+                                class="column"
+                                data-hyui-flexweight="1"
+                                style="
+                                    padding: 0;
+                                    layout-mode: Top;
+                                    min-width: 0;
+                                "
+                            >
+                                <p
+                                    class="label-title"
+                                    style="
+                                        font-size: 16;
+                                        padding: 0;
+                                        margin: 0;
+                                        text-align: center;
+                                    "
+                                >
+                                    {{$selectedPlaylistHeader}}
+                                </p>
+                                <p
+                                    class="subtle"
+                                    style="
+                                        font-size: 12;
+                                        padding: 2 0 0 0;
+                                        margin: 0;
+                                        text-align: center;
+                                    "
+                                >
+                                    {{$selectedPlaylistCount}}
+                                </p>
+                            </div>
+                            <div
+                                class="row"
+                                style="padding: 0; anchor-height: 40"
+                            >
+                                <button
+                                    id="playlist-append"
+                                    class="custom-button"
+                                    data-hyui-default-bg="@MediaBtnDefault"
+                                    data-hyui-hovered-bg="@MediaBtnHover"
+                                    data-hyui-pressed-bg="@MediaBtnPressed"
+                                    style="
+                                        anchor-width: 80;
+                                        anchor-height: 40;
+                                        layout-mode: Center;
+                                    "
+                                >
+                                    <img
+                                        src="MediaRadio/Icons/queue.png"
+                                        width="16"
+                                        height="16"
+                                    />
+                                </button>
+                                <button
+                                    id="playlist-play"
+                                    class="custom-button"
+                                    data-hyui-default-bg="@MediaBtnDefault"
+                                    data-hyui-hovered-bg="@MediaBtnHover"
+                                    data-hyui-pressed-bg="@MediaBtnPressed"
+                                    style="
+                                        anchor-left: 6;
+                                        anchor-width: 80;
+                                        anchor-height: 40;
+                                        layout-mode: Center;
+                                    "
+                                >
+                                    <img
+                                        src="MediaRadio/Icons/play.png"
+                                        width="16"
+                                        height="16"
+                                    />
+                                </button>
+                                <button
+                                    id="playlist-edit-toggle"
+                                    class="custom-button"
+                                    data-hyui-default-bg="@MediaBtnDefault"
+                                    data-hyui-hovered-bg="@MediaBtnHover"
+                                    data-hyui-pressed-bg="@MediaBtnPressed"
+                                    style="
+                                        anchor-left: 6;
+                                        anchor-width: 46;
+                                        anchor-height: 40;
+                                        layout-mode: Center;
+                                    "
+                                >
+                                    {{#if playlistEditMode}}
+                                    <img
+                                        src="MediaRadio/Icons/stop.png"
+                                        width="16"
+                                        height="16"
+                                    />
+                                    {{else}}
+                                    <img
+                                        src="MediaRadio/Icons/edit.png"
+                                        width="16"
+                                        height="16"
+                                    />
+                                    {{/if}}
+                                </button>
+                            </div>
+                        </div>
+
+                        {{#if playlistEditMode}}
+                        <div
+                            class="panel"
+                            style="
+                                layout-mode: Top;
+                                padding: 10;
+                                anchor-width: 600;
+                                anchor-height: 120;
+                                margin-top: 10;
+                            "
+                        >
+                            <div
+                                class="row"
+                                style="
+                                    anchor-top: 0;
+                                    anchor-height: 26;
+                                    anchor-width: 580;
+                                "
+                            >
+                                <input
+                                    id="playlist-name"
+                                    type="text"
+                                    value="{{$playlistName}}"
+                                    placeholder="{{$playlistNameLabel}}"
+                                    style="anchor-height: 26; anchor-width: 220"
+                                />
+                                <div style="anchor-width: 6"></div>
+                                <input
+                                    id="playlist-description"
+                                    type="text"
+                                    value="{{$playlistDescription}}"
+                                    placeholder="{{$descriptionLabel}}"
+                                    style="anchor-height: 26; anchor-width: 200"
+                                />
+                                <div style="anchor-width: 6"></div>
+                                <input
+                                    id="playlist-icon"
+                                    type="text"
+                                    value="{{$playlistIcon}}"
+                                    placeholder="{{$iconLabel}}"
+                                    style="anchor-height: 26; anchor-width: 148"
+                                />
+                            </div>
+                            <div
+                                class="row"
+                                style="
+                                    anchor-top: 34;
+                                    anchor-height: 30;
+                                    anchor-width: 580;
+                                    layout-mode: Left;
+                                "
+                            >
+                                <button
+                                    id="playlist-save"
+                                    class="custom-textbutton"
+                                    data-hyui-default-bg="@MediaBtnDefault"
+                                    data-hyui-hovered-bg="@MediaBtnHover"
+                                    data-hyui-pressed-bg="@MediaBtnPressed"
+                                    data-hyui-default-label-style="@mediabtnlabelcenter"
+                                    data-hyui-hovered-label-style="@mediabtnlabelcenter"
+                                    data-hyui-pressed-label-style="@mediabtnlabelcenter"
+                                    style="anchor-width: 120; anchor-height: 30"
+                                >
+                                    {{$saveLabel}}
+                                </button>
+                                <div style="anchor-width: 6"></div>
+                                <button
+                                    id="playlist-delete"
+                                    class="custom-textbutton"
+                                    data-hyui-default-bg="@MediaBtnDefault"
+                                    data-hyui-hovered-bg="@MediaBtnHover"
+                                    data-hyui-pressed-bg="@MediaBtnPressed"
+                                    data-hyui-default-label-style="@mediabtnlabelcenter"
+                                    data-hyui-hovered-label-style="@mediabtnlabelcenter"
+                                    data-hyui-pressed-label-style="@mediabtnlabelcenter"
+                                    style="anchor-width: 160; anchor-height: 30"
+                                >
+                                    {{$deletePlaylistLabel}}
+                                </button>
+                            </div>
+                        </div>
+                        {{/if}}
+
+                        <p class="section-title" style="padding: 10 0 4 2">
+                            {{$playlistItemsLabel}}
+                        </p>
+                        <div
+                            style="
+                                layout-mode: TopScrolling;
+                                anchor-height: 360;
+                                anchor-width: 600;
+                                padding: 8 8 8 8;
+                            "
+                        >
+                            {{#each playlistItems}}
+                            <div
+                                class="row list-item"
+                                style="anchor-height: 60; vertical-align: top"
+                            >
+                                <div
+                                    class="list-thumb-wrap"
+                                    style="
+                                        anchor-width: 56;
+                                        anchor-height: 36;
+                                        layout-mode: Top;
+                                        padding: 0 4 0 10;
+                                    "
+                                >
+                                    <img
+                                        src="{{$thumb}}"
+                                        width="36"
+                                        height="36"
+                                    />
+                                </div>
+                                <div
+                                    class="column"
+                                    data-hyui-flexweight="1"
+                                    style="
+                                        padding: 0 0 0 6;
+                                        layout-mode: Top;
+                                        min-width: 0;
+                                    "
+                                >
+                                    <div
+                                        style="
+                                            anchor-height: 6;
+                                            layout-mode: Top;
+                                        "
+                                    ></div>
+                                    <p
+                                        class="label-title"
+                                        style="
+                                            font-size: 13;
+                                            padding: 0;
+                                            margin: 0;
+                                        "
+                                    >
+                                        {{$title}}
+                                    </p>
+                                    <p
+                                        class="label-light"
+                                        style="
+                                            font-size: 11;
+                                            padding: 2 0 0 0;
+                                            margin: 0;
+                                        "
+                                    >
+                                        {{$artist}}
+                                    </p>
+                                </div>
+                                <button
+                                    id="{{$playId}}"
+                                    class="custom-button"
+                                    data-hyui-default-bg="@MediaBtnDefault"
+                                    data-hyui-hovered-bg="@MediaBtnHover"
+                                    data-hyui-pressed-bg="@MediaBtnPressed"
+                                    style="
+                                        anchor-width: 32;
+                                        anchor-height: 30;
+                                        layout-mode: Center;
+                                    "
+                                >
+                                    <img
+                                        src="MediaRadio/Icons/play.png"
+                                        width="14"
+                                        height="14"
+                                    />
+                                </button>
+                                {{#if ../playlistEditMode}}
+                                <button
+                                    id="{{$upId}}"
+                                    class="custom-button"
+                                    data-hyui-default-bg="@MediaBtnDefault"
+                                    data-hyui-hovered-bg="@MediaBtnHover"
+                                    data-hyui-pressed-bg="@MediaBtnPressed"
+                                    style="
+                                        anchor-left: 4;
+                                        anchor-width: 32;
+                                        anchor-height: 30;
+                                        layout-mode: Center;
+                                    "
+                                >
+                                    <img
+                                        src="MediaRadio/Icons/up.png"
+                                        width="14"
+                                        height="14"
+                                    />
+                                </button>
+                                <button
+                                    id="{{$downId}}"
+                                    class="custom-button"
+                                    data-hyui-default-bg="@MediaBtnDefault"
+                                    data-hyui-hovered-bg="@MediaBtnHover"
+                                    data-hyui-pressed-bg="@MediaBtnPressed"
+                                    style="
+                                        anchor-left: 4;
+                                        anchor-width: 32;
+                                        anchor-height: 30;
+                                        layout-mode: Center;
+                                    "
+                                >
+                                    <img
+                                        src="MediaRadio/Icons/down.png"
+                                        width="14"
+                                        height="14"
+                                    />
+                                </button>
+                                <button
+                                    id="{{$removeId}}"
+                                    class="custom-button"
+                                    data-hyui-default-bg="@MediaBtnDefault"
+                                    data-hyui-hovered-bg="@MediaBtnHover"
+                                    data-hyui-pressed-bg="@MediaBtnPressed"
+                                    style="
+                                        anchor-left: 4;
+                                        anchor-width: 32;
+                                        anchor-height: 30;
+                                        layout-mode: Center;
+                                    "
+                                >
+                                    <img
+                                        src="MediaRadio/Icons/trash.png"
+                                        width="14"
+                                        height="14"
+                                    />
+                                </button>
+                                {{else}}
+                                <button
+                                    id="{{$queueId}}"
+                                    class="custom-button"
+                                    data-hyui-default-bg="@MediaBtnDefault"
+                                    data-hyui-hovered-bg="@MediaBtnHover"
+                                    data-hyui-pressed-bg="@MediaBtnPressed"
+                                    style="
+                                        anchor-left: 4;
+                                        anchor-width: 32;
+                                        anchor-height: 30;
+                                        layout-mode: Center;
+                                    "
+                                >
+                                    <img
+                                        src="MediaRadio/Icons/queue.png"
+                                        width="14"
+                                        height="14"
+                                    />
+                                </button>
+                                {{/if}}
+                            </div>
+                            {{/each}}
+                        </div>
+                    </div>
+                    {{/if}} {{/if}}
+                </div>
+
+                <div
+                    class="row"
+                    style="
+                        padding: 0;
+                        anchor-width: 600;
+                        anchor-height: 36;
+                        margin-left: 10;
+                        flex-shrink: 0;
+                    "
+                >
+                    <button
+                        id="cancel-button"
+                        class="textbutton"
+                        data-hyui-flexweight="1"
+                        style="anchor-height: 36"
+                    >
+                        {{$closeLabel}}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

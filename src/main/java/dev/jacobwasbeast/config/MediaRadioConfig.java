@@ -12,13 +12,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class MediaRadioConfig {
-    private int chunkDurationMs = 750;
     private List<String> ytDlpArgs = new ArrayList<>();
     private List<String> ytDlpMetadataArgs = new ArrayList<>();
-
-    public int getChunkDurationMs() {
-        return chunkDurationMs;
-    }
 
     public List<String> getYtDlpArgs() {
         return ytDlpArgs != null ? ytDlpArgs : List.of();
