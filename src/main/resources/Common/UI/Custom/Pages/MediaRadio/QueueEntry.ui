@@ -1,0 +1,69 @@
+$C = "../../Common.ui";
+
+Group {
+  LayoutMode: Left;
+  Background: $C.@InputBoxBackground;
+  FlexWeight: 1;
+  Padding: (Left: 10, Top: 8, Bottom: 8, Right: 8);
+  Anchor: (Height: 56);
+
+  Group {
+    LayoutMode: Top;
+    FlexWeight: 1;
+
+    Label #QueueTitle {
+        Text: "%mediaRadio.customUI.songTitle";
+        Style: LabelStyle(
+            TextColor: #FFFFFF,
+            FontSize: 14,
+            RenderBold: true
+        );
+    }
+
+    Label #QueueArtist {
+        Text: "%mediaRadio.customUI.artistName";
+        Style: LabelStyle(
+            TextColor: #C8C8C8,
+            FontSize: 12
+        );
+    }
+
+    Label #QueueStatus {
+        Text: "";
+        Style: LabelStyle(
+            TextColor: #96a9be,
+            FontSize: 11
+        );
+    }
+  }
+
+  $C.@SmallSecondaryTextButton #QueuePlay {
+      Text: %mediaRadio.customUI.play;
+      Anchor: (Width: 60);
+      Padding: (Horizontal: 6);
+  }
+
+  Group { Anchor: (Width: 4); }
+
+  $C.@SmallSecondaryTextButton #QueueUp {
+      Text: "Up";
+      Anchor: (Width: 32);
+      Padding: (Horizontal: 6);
+  }
+
+  Group { Anchor: (Width: 4); }
+
+  $C.@SmallSecondaryTextButton #QueueDown {
+      Text: "Down";
+      Anchor: (Width: 40);
+      Padding: (Horizontal: 6);
+  }
+
+  Group { Anchor: (Width: 4); }
+
+  $C.@SmallSecondaryTextButton #QueueRemove {
+      Text: %mediaRadio.customUI.remove;
+      Anchor: (Width: 70);
+      Padding: (Horizontal: 6);
+  }
+}

@@ -1,0 +1,43 @@
+$C = "../../Common.ui";
+
+Group {
+  LayoutMode: Left;
+  Background: $C.@InputBoxBackground;
+  FlexWeight: 1;
+  Padding: (Left: 8, Top: 6, Bottom: 6, Right: 6);
+  Anchor: (Height: 54);
+
+  AssetImage #PlaylistIcon {
+    Anchor: (Width: 32, Height: 32);
+  }
+
+  Group { Anchor: (Width: 8); }
+
+  Group {
+    LayoutMode: Top;
+    FlexWeight: 1;
+
+    Label #PlaylistName {
+        Text: "%mediaRadio.customUI.playlistName";
+        Style: LabelStyle(
+            TextColor: #FFFFFF,
+            FontSize: 13,
+            RenderBold: true
+        );
+    }
+
+    Label #PlaylistCount {
+        Text: "0";
+        Style: LabelStyle(
+            TextColor: #96a9be,
+            FontSize: 11
+        );
+    }
+  }
+
+  $C.@SmallSecondaryTextButton #PlaylistSelect {
+      Text: %mediaRadio.customUI.select;
+      Anchor: (Width: 70);
+      Padding: (Horizontal: 6);
+  }
+}

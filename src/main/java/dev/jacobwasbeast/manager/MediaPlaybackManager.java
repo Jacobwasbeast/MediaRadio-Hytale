@@ -17,11 +17,16 @@ import com.hypixel.hytale.server.core.entity.entities.Player;
 import com.hypixel.hytale.server.core.modules.block.BlockModule;
 import com.hypixel.hytale.server.core.modules.entity.component.TransformComponent;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
+import com.hypixel.hytale.server.core.asset.type.blocktype.config.BlockType;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.chunk.BlockComponentChunk;
+import com.hypixel.hytale.server.core.universe.world.chunk.WorldChunk;
 import com.hypixel.hytale.server.core.universe.world.storage.ChunkStore;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import dev.jacobwasbeast.MediaRadioPlugin;
+import dev.jacobwasbeast.manager.PlaylistManager;
+import dev.jacobwasbeast.util.BlockTypeUtil;
+import dev.jacobwasbeast.util.PlaybackScopeUtil;
 import dev.jacobwasbeast.util.RadioItemUtil;
 import dev.jacobwasbeast.util.VolumeUtil;
 
@@ -41,6 +46,8 @@ import com.hypixel.hytale.server.npc.entities.NPCEntity;
  */
 public class MediaPlaybackManager {
     private final MediaRadioPlugin plugin;
+    private final PlaylistManager playlistManager;
+    private final BatchPlaybackManager batchManager;
     private final Map<String, PlaybackSession> activeBlockSessions = new ConcurrentHashMap<>();
     private final Map<UUID, PlaybackSession> activePlayerSessions = new ConcurrentHashMap<>();
     private final Map<UUID, Boolean> loopPreferences = new ConcurrentHashMap<>();
@@ -50,11 +57,21 @@ public class MediaPlaybackManager {
     private static final long MISSING_ASSET_RETRY_DELAY_MS = 500;
     private static final long BASE_CHUNK_OVERLAP_MS = 15;
     private static final long MAX_CHUNK_OVERLAP_MS = 120;
+    private static final long MARKER_POSITION_UPDATE_INTERVAL_MS = 50; // Update marker position every 50ms for smooth tracking
 
     private int audioMarkerRoleIndex = Integer.MIN_VALUE;
 
     public MediaPlaybackManager(MediaRadioPlugin plugin) {
         this.plugin = plugin;
+        this.playlistManager = plugin.getPlaylistManager();
+        this.batchManager = new BatchPlaybackManager(plugin, plugin.getMediaManager());
+    }
+
+    /**
+     * Get the batch manager instance
+     */
+    public BatchPlaybackManager getBatchManager() {
+        return batchManager;
     }
 
     /**
@@ -86,7 +103,7 @@ public class MediaPlaybackManager {
         PlaybackSession existing = activeBlockSessions.remove(key);
         if (existing != null) {
             existing.stop();
-            handleSessionEnded(existing, store);
+            handleSessionEnded(existing, store, false);
         }
 
         // Create new session
@@ -95,6 +112,7 @@ public class MediaPlaybackManager {
         attachBlockEntityRef(session, store, blockPos);
 
         // Start playback
+        applyQueueLoop(session, resolveScopeId(blockPos, store));
         session.play();
         session.setVolume(getVolume(blockPos, store));
         playCurrentChunk(session, store);
@@ -120,7 +138,7 @@ public class MediaPlaybackManager {
         PlaybackSession existing = activeBlockSessions.remove(key);
         if (existing != null) {
             existing.stop();
-            handleSessionEnded(existing, store);
+            handleSessionEnded(existing, store, false);
         }
 
         PlaybackSession session = new PlaybackSession(
@@ -136,6 +154,7 @@ public class MediaPlaybackManager {
         activeBlockSessions.put(key, session);
         attachBlockEntityRef(session, store, blockPos);
 
+        applyQueueLoop(session, resolveScopeId(blockPos, store));
         session.play();
         session.setVolume(getVolume(blockPos, store));
         playCurrentChunk(session, store);
@@ -160,7 +179,7 @@ public class MediaPlaybackManager {
         PlaybackSession existing = activePlayerSessions.remove(playerId);
         if (existing != null) {
             existing.stop();
-            handleSessionEnded(existing, store);
+            handleSessionEnded(existing, store, false);
         }
 
         PlaybackSession session = new PlaybackSession(
@@ -173,7 +192,7 @@ public class MediaPlaybackManager {
                 mediaInfo.thumbnailAssetPath,
                 mediaInfo.url,
                 mediaInfo.duration * 1000L);
-        session.setLoopEnabled(loopPreferences.getOrDefault(playerId, false));
+        applyQueueLoop(session, PlaybackScopeUtil.playerScopeId(playerId));
         session.setVolume(getPlayerVolume(playerId));
         activePlayerSessions.put(playerId, session);
 
@@ -248,7 +267,7 @@ public class MediaPlaybackManager {
         PlaybackSession session = activeBlockSessions.remove(key);
         if (session != null) {
             session.stop();
-            handleSessionEnded(session, store);
+            handleSessionEnded(session, store, false);
             plugin.getLogger().at(Level.INFO).log("Stopped playback");
         }
     }
@@ -264,7 +283,7 @@ public class MediaPlaybackManager {
         PlaybackSession session = activePlayerSessions.remove(playerId);
         if (session != null) {
             session.stop();
-            handleSessionEnded(session, store);
+            handleSessionEnded(session, store, false);
             plugin.getLogger().at(Level.INFO).log("Stopped playback for player %s", playerId);
         }
     }
@@ -504,29 +523,68 @@ public class MediaPlaybackManager {
         if (!session.isPlaying()) {
             return;
         }
-        if (!session.isPlayerBound() && !isBlockPlaybackValid(session)) {
-            session.stop();
-            removeSession(session);
-            handleSessionEnded(session, store);
-            return;
+        if (!session.isPlayerBound()) {
+            if (!isBlockPlaybackValid(session)) {
+                session.stop();
+                removeSession(session);
+                handleSessionEnded(session, store, false);
+                return;
+            }
+            // Double-check block is still a boombox (by block ID) and has not been destroyed.
+            Vector3i blockPos = session.getBlockPosition();
+            if (blockPos == null || !isBoomboxBlockStillThere(store, blockPos)) {
+                session.stop();
+                removeSession(session);
+                handleSessionEnded(session, store, false);
+                return;
+            }
+        }
+        // For handheld radio: pause if radio is no longer in hand or offhand (events may be missed).
+        if (session.isPlayerBound()) {
+            PlayerRef playerRef = session.getPlayerRef();
+            if (playerRef != null && !shouldKeepPlaying(playerRef, store)) {
+                session.pauseByUnheld();
+                return;
+            }
         }
 
         String trackId = session.getTrackId();
-        String chunkTrackId = session.getCurrentChunkTrackId();
         int chunkIndex = session.getCurrentChunk();
+        int totalChunks = session.getTotalChunks();
 
-        // Look up chunk SoundEvent and Track Model
+        // Ensure batches are loaded for rolling window (async, non-blocking)
+        float volumeDb = session.getVolume();
+        batchManager.ensureBatchesLoaded(trackId, chunkIndex, volumeDb);
+
+        // Calculate which batch this chunk belongs to
+        int currentBatch = chunkIndex / MediaManager.LAYERS_PER_BATCH;
+        String batchId = BatchPlaybackManager.getBatchId(trackId, currentBatch);
+        boolean fullBatchAvailable = (chunkIndex + MediaManager.LAYERS_PER_BATCH - 1) < totalChunks;
+
+        // Look up batch SoundEvent and Track Model
         // We now use a single model "medradio_marker_<trackId>" for the whole track
         String trackAppearanceId = "medradio_marker_" + trackId;
 
-        SoundEvent soundEvent = SoundEvent.getAssetMap().getAsset(chunkTrackId);
         ModelAsset trackModel = ModelAsset.getAssetMap().getAsset(trackAppearanceId);
+        SoundEvent chunkSoundEvent = SoundEvent.getAssetMap()
+                .getAsset(String.format("%s_Chunk_%03d", trackId, chunkIndex));
 
-        if (soundEvent == null || trackModel == null) {
+        SoundEvent batchSoundEvent = null;
+        if (fullBatchAvailable) {
+            batchSoundEvent = SoundEvent.getAssetMap().getAsset(batchId);
+        }
+
+        if (trackModel == null || (fullBatchAvailable && batchSoundEvent == null)
+                || (!fullBatchAvailable && chunkSoundEvent == null)) {
             // Log less frequently or debug
             if (session.getMissingAssetRetries() % 5 == 0) {
-                plugin.getLogger().at(Level.WARNING).log("Chunk Asset not ready: %s (Sound or Model missing)",
-                        chunkTrackId);
+                if (fullBatchAvailable) {
+                    plugin.getLogger().at(Level.WARNING).log("Batch Asset not ready: %s (Sound or Model missing)",
+                            batchId);
+                } else {
+                    plugin.getLogger().at(Level.WARNING).log("Chunk Asset not ready: %s (Sound or Model missing)",
+                            String.format("%s_Chunk_%03d", trackId, chunkIndex));
+                }
             }
             scheduleMissingAssetRetry(session, store);
             return;
@@ -597,9 +655,12 @@ public class MediaPlaybackManager {
             NPCEntity.setAppearance(marker, trackAppearanceId, (ComponentAccessor<EntityStore>) store);
         }
 
-        // Trigger Animation State for this chunk
+        // Trigger Animation State for this batch
+        // Use the batch ID for the animation state
         NPCEntity npc = session.getNPCEntity();
         if (npc != null) {
+            // For batch system, we still use chunk-based animation states for compatibility
+            // But the sound event is batch-based
             String animationState = "PlayChunk" + chunkIndex;
             npc.playAnimation(marker, AnimationSlot.Action, animationState, (ComponentAccessor<EntityStore>) store);
         } else {
@@ -609,20 +670,82 @@ public class MediaPlaybackManager {
         // Schedule next chunk
         scheduleNextChunk(session, store);
 
-        // Update position if player bound
+        // Start/restart periodic position updates for accurate marker tracking
+        startMarkerPositionUpdates(session, store);
+    }
+
+    /**
+     * Start periodic position updates for the marker entity
+     * Updates position every 50ms for smooth tracking
+     */
+    private void startMarkerPositionUpdates(PlaybackSession session, Store<EntityStore> store) {
+        // Cancel existing position update task if any
+        ScheduledFuture<?> existing = session.getScheduledPositionUpdate();
+        if (existing != null && !existing.isDone()) {
+            existing.cancel(false);
+        }
+
+        // Schedule periodic position updates
+        ScheduledFuture<?> positionUpdateTask = scheduler.scheduleAtFixedRate(() -> {
+            if (!session.isPlaying()) {
+                return;
+            }
+
+            // Execute on world thread
+            store.getExternalData().getWorld().execute(() -> {
+                updateMarkerPosition(session, store);
+            });
+        }, 0, MARKER_POSITION_UPDATE_INTERVAL_MS, TimeUnit.MILLISECONDS);
+
+        session.setScheduledPositionUpdate(positionUpdateTask);
+    }
+
+    /**
+     * Update marker entity position based on playback source
+     */
+    private void updateMarkerPosition(PlaybackSession session, Store<EntityStore> store) {
+        if (!session.isPlaying()) {
+            return;
+        }
+
+        com.hypixel.hytale.component.Ref<EntityStore> marker = session.getMarkerEntity();
+        if (marker == null || !marker.isValid()) {
+            return;
+        }
+
+        TransformComponent markerTransform = store.getComponent(marker, TransformComponent.getComponentType());
+        if (markerTransform == null) {
+            return;
+        }
+
         if (session.isPlayerBound()) {
+            // Update position to follow player
             PlayerRef pRef = session.getPlayerRef();
             if (pRef != null && pRef.isValid()) {
                 var pEntRef = pRef.getReference();
                 if (pEntRef != null && pEntRef.isValid()) {
                     TransformComponent pTransform = store.getComponent(pEntRef, TransformComponent.getComponentType());
                     if (pTransform != null) {
-                        TransformComponent markerTransform = store.getComponent(marker,
-                                TransformComponent.getComponentType());
-                        if (markerTransform != null) {
-                            markerTransform.setPosition(pTransform.getPosition());
-                        }
+                        Vector3d playerPos = pTransform.getPosition();
+                        // Use exact player position for accurate tracking
+                        markerTransform.setPosition(playerPos);
                     }
+                }
+            }
+        } else {
+            // Update position to block center (shouldn't change, but ensure accuracy)
+            Vector3i blockPos = session.getBlockPosition();
+            if (blockPos != null) {
+                Vector3d blockCenter = new Vector3d(blockPos.getX() + 0.5, blockPos.getY() + 0.5, blockPos.getZ() + 0.5);
+                Vector3d currentPos = markerTransform.getPosition();
+                // Only update if position has drifted (more than 0.1 blocks away)
+                double distance = Math.sqrt(
+                    Math.pow(currentPos.getX() - blockCenter.getX(), 2) +
+                    Math.pow(currentPos.getY() - blockCenter.getY(), 2) +
+                    Math.pow(currentPos.getZ() - blockCenter.getZ(), 2)
+                );
+                if (distance > 0.1) {
+                    markerTransform.setPosition(blockCenter);
                 }
             }
         }
@@ -635,15 +758,17 @@ public class MediaPlaybackManager {
         long lagMs = session.getLastScheduleLagMs();
         long overlapMs = BASE_CHUNK_OVERLAP_MS + lagMs;
         overlapMs = Math.min(MAX_CHUNK_OVERLAP_MS, overlapMs);
-        long maxOverlap = Math.max(0, session.getChunkDurationMs() - 5);
+        // Use fixed chunk duration
+        int chunkDurationMs = MediaManager.CHUNK_DURATION_MS;
+        long maxOverlap = Math.max(0, chunkDurationMs - 5);
         overlapMs = Math.min(overlapMs, maxOverlap);
-        long delayMs = Math.max(0, session.getChunkDurationMs() - overlapMs);
+        long delayMs = Math.max(0, chunkDurationMs - overlapMs);
 
         ScheduledFuture<?> future = scheduler.schedule(() -> {
             if (!session.isPlaying()) {
                 return;
             }
-            long expectedEnd = session.getCurrentChunkStartMs() + session.getChunkDurationMs();
+            long expectedEnd = session.getCurrentChunkStartMs() + chunkDurationMs;
             long lag = Math.max(0, System.currentTimeMillis() - expectedEnd);
             session.setLastScheduleLagMs(lag);
             if (session.advanceChunk()) {
@@ -656,7 +781,7 @@ public class MediaPlaybackManager {
             removeSession(session);
             // Use world thread to clean up
             store.getExternalData().getWorld().execute(() -> {
-                handleSessionEnded(session, store);
+                handleSessionEnded(session, store, true);
             });
         }, delayMs, TimeUnit.MILLISECONDS);
 
@@ -671,7 +796,7 @@ public class MediaPlaybackManager {
             session.stop();
             removeSession(session);
             store.getExternalData().getWorld().execute(() -> {
-                handleSessionEnded(session, store);
+                handleSessionEnded(session, store, false);
             });
             return;
         }
@@ -740,10 +865,39 @@ public class MediaPlaybackManager {
         return blockRef.isValid();
     }
 
+    /**
+     * Double-check the block at the position is still a boombox (by block ID) and has not been destroyed.
+     */
+    private boolean isBoomboxBlockStillThere(Store<EntityStore> store, Vector3i pos) {
+        if (pos == null || store == null) {
+            return false;
+        }
+        World world = store.getExternalData().getWorld();
+        if (world == null) {
+            return false;
+        }
+        WorldChunk chunk = world.getChunkIfInMemory(ChunkUtil.indexChunkFromBlock(pos.getX(), pos.getZ()));
+        if (chunk == null) {
+            return false;
+        }
+        BlockType blockType = chunk.getBlockType(pos.getX(), pos.getY(), pos.getZ());
+        if (blockType == null) {
+            return false;
+        }
+        String blockId = blockType.getId();
+        return BlockTypeUtil.isBoomboxBlockId(blockId);
+    }
+
     private void removeSession(PlaybackSession session) {
         if (session == null) {
             return;
         }
+        // Cancel position update task
+        ScheduledFuture<?> positionUpdate = session.getScheduledPositionUpdate();
+        if (positionUpdate != null && !positionUpdate.isDone()) {
+            positionUpdate.cancel(false);
+        }
+
         if (session.isPlayerBound()) {
             PlayerRef playerRef = session.getPlayerRef();
             if (playerRef != null) {
@@ -757,7 +911,7 @@ public class MediaPlaybackManager {
         }
     }
 
-    private void handleSessionEnded(PlaybackSession session, Store<EntityStore> store) {
+    private void handleSessionEnded(PlaybackSession session, Store<EntityStore> store, boolean allowQueueAdvance) {
         if (session == null) {
             return;
         }
@@ -779,6 +933,12 @@ public class MediaPlaybackManager {
                             null,
                             null);
                 }
+            }
+        }
+
+        if (allowQueueAdvance) {
+            if (tryAdvanceQueue(session, store)) {
+                // Continue with cleanup of the previous session only.
             }
         }
 
@@ -805,13 +965,204 @@ public class MediaPlaybackManager {
         if (trackId == null || trackId.isEmpty()) {
             return;
         }
+
+        // Cleanup batches for this track
+        batchManager.cleanupBatches(trackId);
+
         if (isTrackActive(trackId)) {
             return;
+        }
+        if (playlistManager != null) {
+            String url = session.getUrl();
+            if (url != null && playlistManager.isUrlReferenced(url)) {
+                return;
+            }
         }
         MediaManager manager = plugin.getMediaManager();
         if (manager != null) {
             manager.cleanupRuntimeAssetsAsync(trackId);
         }
+    }
+
+    private boolean tryAdvanceQueue(PlaybackSession session, Store<EntityStore> store) {
+        if (playlistManager == null || store == null) {
+            return false;
+        }
+        String scopeId = resolveScopeId(session, store);
+        if (scopeId.isEmpty()) {
+            return false;
+        }
+        PlaylistManager.QueueState queue = playlistManager.getQueue(scopeId);
+        if (queue == null || queue.items == null || queue.items.isEmpty()) {
+            return false;
+        }
+        int currentIndex = resolveQueueIndex(queue, session.getUrl());
+        int nextIndex = resolveNextQueueIndex(queue, currentIndex);
+        if (nextIndex < 0 || nextIndex >= queue.items.size()) {
+            return false;
+        }
+        playlistManager.setQueueIndex(scopeId, nextIndex);
+        PlaylistManager.PlaylistItem item = queue.items.get(nextIndex);
+        if (item == null || item.url == null || item.url.isEmpty()) {
+            return false;
+        }
+        playQueueItem(item, session, store, scopeId);
+        return true;
+    }
+
+    private int resolveQueueIndex(PlaylistManager.QueueState queue, String url) {
+        if (queue == null || queue.items == null || queue.items.isEmpty()) {
+            return 0;
+        }
+        int current = queue.index;
+        if (current >= 0 && current < queue.items.size()) {
+            PlaylistManager.PlaylistItem item = queue.items.get(current);
+            if (item != null && url != null && url.equals(item.url)) {
+                return current;
+            }
+        }
+        if (url != null) {
+            for (int i = 0; i < queue.items.size(); i++) {
+                PlaylistManager.PlaylistItem item = queue.items.get(i);
+                if (item != null && url.equals(item.url)) {
+                    return i;
+                }
+            }
+        }
+        return Math.max(0, Math.min(current, queue.items.size() - 1));
+    }
+
+    private int resolveNextQueueIndex(PlaylistManager.QueueState queue, int currentIndex) {
+        if (queue == null || queue.items == null || queue.items.isEmpty()) {
+            return -1;
+        }
+        if (queue.loopMode == PlaylistManager.LoopMode.ONE) {
+            return currentIndex;
+        }
+        int next = currentIndex + 1;
+        if (next < queue.items.size()) {
+            return next;
+        }
+        if (queue.loopMode == PlaylistManager.LoopMode.ALL) {
+            return 0;
+        }
+        return -1;
+    }
+
+    private void playQueueItem(PlaylistManager.PlaylistItem item, PlaybackSession previous,
+            Store<EntityStore> store, String scopeId) {
+        MediaManager mediaManager = plugin.getMediaManager();
+        if (mediaManager == null || item == null || item.url == null || item.url.isEmpty()) {
+            return;
+        }
+        MediaLibrary library = plugin.getMediaLibrary();
+        if (library != null && scopeId != null && !scopeId.isEmpty()) {
+            library.upsertSongStatus(scopeId, item.url, "Downloading...", null, null, null, 0, null, null);
+        }
+        mediaManager.requestMedia(item.url).thenAccept(mediaInfo -> {
+            store.getExternalData().getWorld().execute(() -> {
+                if (library != null && scopeId != null && !scopeId.isEmpty()) {
+                    library.upsertSongStatus(
+                            scopeId,
+                            mediaInfo.url,
+                            "Preparing...",
+                            mediaInfo.title,
+                            mediaInfo.artist,
+                            mediaInfo.thumbnailUrl,
+                            mediaInfo.duration,
+                            mediaInfo.trackId,
+                            mediaInfo.thumbnailAssetPath);
+                }
+                if (previous.isPlayerBound()) {
+                    PlayerRef playerRef = previous.getPlayerRef();
+                    if (playerRef != null) {
+                        mediaManager.playSound(mediaInfo, playerRef, store).thenRun(() -> {
+                            if (library != null && scopeId != null && !scopeId.isEmpty()) {
+                                library.upsertSongStatus(
+                                        scopeId,
+                                        mediaInfo.url,
+                                        "Playing",
+                                        mediaInfo.title,
+                                        mediaInfo.artist,
+                                        mediaInfo.thumbnailUrl,
+                                        mediaInfo.duration,
+                                        mediaInfo.trackId,
+                                        mediaInfo.thumbnailAssetPath);
+                            }
+                        });
+                        return;
+                    }
+                }
+                Vector3i pos = previous.getBlockPosition();
+                if (pos != null) {
+                    mediaManager.playSoundAtBlock(mediaInfo, pos,
+                            dev.jacobwasbeast.manager.MediaManager.CHUNK_DURATION_MS, store).thenRun(() -> {
+                        if (library != null && scopeId != null && !scopeId.isEmpty()) {
+                            library.upsertSongStatus(
+                                    scopeId,
+                                    mediaInfo.url,
+                                    "Playing",
+                                    mediaInfo.title,
+                                    mediaInfo.artist,
+                                    mediaInfo.thumbnailUrl,
+                                    mediaInfo.duration,
+                                    mediaInfo.trackId,
+                                    mediaInfo.thumbnailAssetPath);
+                        }
+                    });
+                }
+            });
+        }).exceptionally(ex -> {
+            if (library != null && scopeId != null && !scopeId.isEmpty()) {
+                library.upsertSongStatus(scopeId, item.url, "Failed", null, null, null, 0, null, null);
+            }
+            return null;
+        });
+    }
+
+    private String resolveScopeId(PlaybackSession session, Store<EntityStore> store) {
+        if (session == null) {
+            return "";
+        }
+        if (session.isPlayerBound()) {
+            PlayerRef playerRef = session.getPlayerRef();
+            if (playerRef != null) {
+                return PlaybackScopeUtil.playerScopeId(playerRef.getUuid());
+            }
+            return "";
+        }
+        Vector3i pos = session.getBlockPosition();
+        if (pos == null) {
+            return "";
+        }
+        if (store != null && store.getExternalData() != null && store.getExternalData().getWorld() != null) {
+            return PlaybackScopeUtil.boomboxScopeId(store.getExternalData().getWorld(), pos);
+        }
+        return PlaybackScopeUtil.boomboxScopeId("world", pos);
+    }
+
+    private String resolveScopeId(Vector3i blockPos, Store<EntityStore> store) {
+        if (blockPos == null) {
+            return "";
+        }
+        if (store != null && store.getExternalData() != null && store.getExternalData().getWorld() != null) {
+            return PlaybackScopeUtil.boomboxScopeId(store.getExternalData().getWorld(), blockPos);
+        }
+        return PlaybackScopeUtil.boomboxScopeId("world", blockPos);
+    }
+
+    private void applyQueueLoop(PlaybackSession session, String scopeId) {
+        if (session == null) {
+            return;
+        }
+        if (playlistManager != null && scopeId != null && !scopeId.isEmpty()) {
+            PlaylistManager.QueueState queue = playlistManager.getQueue(scopeId);
+            if (queue != null && queue.loopMode == PlaylistManager.LoopMode.ONE) {
+                session.setLoopEnabled(true);
+                return;
+            }
+        }
+        session.setLoopEnabled(false);
     }
 
     private boolean isTrackActive(String trackId) {
