@@ -267,7 +267,7 @@ $C.@Container {
                 LayoutMode: Top;
                 Background: $C.@InputBoxBackground;
                 Padding: (Full: 10);
-                Anchor: (Top: 8, Height: 150, Left: 4, Right: 4);
+                Anchor: (Top: 8, Height: 190, Left: 4, Right: 4);
                 Visible: false;
 
                 Label {
@@ -277,31 +277,32 @@ $C.@Container {
                         FontSize: 13,
                         RenderBold: true
                     );
+                    Anchor: (Top: 0, Height: 16, Left: 0, Right: 0);
                 }
 
                 $C.@TextField #SongEditTitle {
-                    @Anchor = (Top: 6, Height: 26, Left: 0, Right: 0);
+                    @Anchor = (Top: 22, Height: 26, Left: 0, Right: 0);
                     PlaceholderText: "%mediaRadio.customUI.songTitle";
                 }
 
                 $C.@TextField #SongEditArtist {
-                    @Anchor = (Top: 6, Height: 26, Left: 0, Right: 0);
+                    @Anchor = (Top: 54, Height: 26, Left: 0, Right: 0);
                     PlaceholderText: "%mediaRadio.customUI.artistName";
                 }
 
                 $C.@TextField #SongEditDescription {
-                    @Anchor = (Top: 6, Height: 26, Left: 0, Right: 0);
+                    @Anchor = (Top: 86, Height: 26, Left: 0, Right: 0);
                     PlaceholderText: "%mediaRadio.customUI.description";
                 }
 
                 $C.@TextField #SongEditIcon {
-                    @Anchor = (Top: 6, Height: 26, Left: 0, Right: 0);
+                    @Anchor = (Top: 118, Height: 26, Left: 0, Right: 0);
                     PlaceholderText: "%mediaRadio.customUI.icon";
                 }
 
                 Group {
                     LayoutMode: Left;
-                    Anchor: (Top: 8, Height: 24);
+                    Anchor: (Top: 150, Height: 24, Left: 0, Right: 0);
 
                     $C.@SmallSecondaryTextButton #SongEditSave {
                         Text: %mediaRadio.customUI.save;
@@ -312,7 +313,7 @@ $C.@Container {
 
                     $C.@SmallSecondaryTextButton #SongEditCancel {
                         Text: %mediaRadio.customUI.cancel;
-                        Anchor: (Width: 80);
+                        Anchor: (Width: 140);
                     }
                 }
             }
@@ -359,32 +360,32 @@ $C.@Container {
                     Group #PlaylistItemsList {
                         LayoutMode: TopScrolling;
                         ScrollbarStyle: $C.@DefaultScrollbarStyle;
-                        Anchor: (Height: 200);
+                        Anchor: (Height: 180);
                     }
 
                     Group #PlaylistMeta {
                         LayoutMode: Top;
                         Background: $C.@InputBoxBackground;
                         Padding: (Full: 10);
-                        Anchor: (Top: 8, Height: 90, Left: 0, Right: 0);
+                        Anchor: (Top: 190, Height: 110, Left: 0, Right: 0);
 
-                        $C.@TextField #PlaylistNameInput {
-                            @Anchor = (Height: 26, Left: 0, Right: 0);
-                            PlaceholderText: "%mediaRadio.customUI.playlistName";
-                        }
+                            $C.@TextField #PlaylistNameInput {
+                                @Anchor = (Top: 0, Height: 26, Left: 0, Right: 0);
+                                PlaceholderText: "%mediaRadio.customUI.playlistName";
+                            }
 
-                        $C.@TextField #PlaylistDescriptionInput {
-                            @Anchor = (Top: 6, Height: 26, Left: 0, Right: 0);
-                            PlaceholderText: "%mediaRadio.customUI.description";
-                        }
+                            $C.@TextField #PlaylistDescriptionInput {
+                                @Anchor = (Top: 32, Height: 26, Left: 0, Right: 0);
+                                PlaceholderText: "%mediaRadio.customUI.description";
+                            }
 
-                        $C.@TextField #PlaylistIconInput {
-                            @Anchor = (Top: 6, Height: 26, Left: 0, Right: 0);
-                            PlaceholderText: "%mediaRadio.customUI.icon";
+                            $C.@TextField #PlaylistIconInput {
+                                @Anchor = (Top: 64, Height: 26, Left: 0, Right: 0);
+                                PlaceholderText: "%mediaRadio.customUI.icon";
+                            }
                         }
                     }
                 }
-            }
 
             Group {
                 LayoutMode: Left;

@@ -661,39 +661,77 @@
                             anchor-width: 600;
                             padding: 10;
                             margin-left: 10;
-                            anchor-height: 220;
+                            anchor-height: 190;
                         "
                     >
-                        <p class="section-title">{{$editSongLabel}}</p>
+                        <p
+                            class="section-title"
+                            style="
+                                padding: 0;
+                                margin: 0;
+                                anchor-top: 0;
+                                anchor-height: 16;
+                            "
+                        >
+                            {{$editSongLabel}}
+                        </p>
                         <input
                             id="song-edit-title"
                             type="text"
                             value="{{$songEditTitle}}"
                             placeholder="{{$songTitleLabel}}"
-                            style="anchor-height: 26"
+                            style="
+                                anchor-height: 26;
+                                anchor-top: 22;
+                                anchor-left: 0;
+                                anchor-right: 0;
+                            "
                         />
                         <input
                             id="song-edit-artist"
                             type="text"
                             value="{{$songEditArtist}}"
                             placeholder="{{$songArtistLabel}}"
-                            style="anchor-height: 26"
+                            style="
+                                anchor-height: 26;
+                                anchor-top: 54;
+                                anchor-left: 0;
+                                anchor-right: 0;
+                            "
                         />
                         <input
                             id="song-edit-description"
                             type="text"
                             value="{{$songEditDescription}}"
                             placeholder="{{$descriptionLabel}}"
-                            style="anchor-height: 26"
+                            style="
+                                anchor-height: 26;
+                                anchor-top: 86;
+                                anchor-left: 0;
+                                anchor-right: 0;
+                            "
                         />
                         <input
                             id="song-edit-icon"
                             type="text"
                             value="{{$songEditIcon}}"
                             placeholder="{{$iconLabel}}"
-                            style="anchor-height: 26"
+                            style="
+                                anchor-height: 26;
+                                anchor-top: 118;
+                                anchor-left: 0;
+                                anchor-right: 0;
+                            "
                         />
-                        <div class="row" style="padding: 6 0 0 0">
+                        <div
+                            class="row"
+                            style="
+                                padding: 0;
+                                anchor-top: 150;
+                                anchor-height: 30;
+                                layout-mode: Left;
+                            "
+                        >
                             <button
                                 id="song-edit-save"
                                 class="custom-textbutton"
@@ -716,7 +754,7 @@
                                 data-hyui-default-label-style="@mediabtnlabelcenter"
                                 data-hyui-hovered-label-style="@mediabtnlabelcenter"
                                 data-hyui-pressed-label-style="@mediabtnlabelcenter"
-                                style="anchor-left: 6; anchor-width: 80"
+                                style="anchor-left: 6; anchor-width: 140"
                             >
                                 {{$cancelLabel}}
                             </button>
@@ -1300,7 +1338,14 @@
                                 margin-top: 10;
                             "
                         >
-                            <div class="row" style="anchor-width: 580">
+                            <div
+                                class="row"
+                                style="
+                                    anchor-top: 0;
+                                    anchor-height: 26;
+                                    anchor-width: 580;
+                                "
+                            >
                                 <input
                                     id="playlist-name"
                                     type="text"
@@ -1308,32 +1353,31 @@
                                     placeholder="{{$playlistNameLabel}}"
                                     style="anchor-height: 26; anchor-width: 220"
                                 />
+                                <div style="anchor-width: 6"></div>
                                 <input
                                     id="playlist-description"
                                     type="text"
                                     value="{{$playlistDescription}}"
                                     placeholder="{{$descriptionLabel}}"
-                                    style="
-                                        anchor-left: 6;
-                                        anchor-height: 26;
-                                        anchor-width: 220;
-                                    "
+                                    style="anchor-height: 26; anchor-width: 200"
                                 />
+                                <div style="anchor-width: 6"></div>
                                 <input
                                     id="playlist-icon"
                                     type="text"
                                     value="{{$playlistIcon}}"
                                     placeholder="{{$iconLabel}}"
-                                    style="
-                                        anchor-left: 6;
-                                        anchor-height: 26;
-                                        anchor-width: 128;
-                                    "
+                                    style="anchor-height: 26; anchor-width: 148"
                                 />
                             </div>
                             <div
                                 class="row"
-                                style="padding: 8 0 0 0; anchor-width: 580"
+                                style="
+                                    anchor-top: 34;
+                                    anchor-height: 30;
+                                    anchor-width: 580;
+                                    layout-mode: Left;
+                                "
                             >
                                 <button
                                     id="playlist-save"
@@ -1348,6 +1392,7 @@
                                 >
                                     {{$saveLabel}}
                                 </button>
+                                <div style="anchor-width: 6"></div>
                                 <button
                                     id="playlist-delete"
                                     class="custom-textbutton"
@@ -1357,11 +1402,7 @@
                                     data-hyui-default-label-style="@mediabtnlabelcenter"
                                     data-hyui-hovered-label-style="@mediabtnlabelcenter"
                                     data-hyui-pressed-label-style="@mediabtnlabelcenter"
-                                    style="
-                                        anchor-left: 6;
-                                        anchor-width: 160;
-                                        anchor-height: 30;
-                                    "
+                                    style="anchor-width: 160; anchor-height: 30"
                                 >
                                     {{$deletePlaylistLabel}}
                                 </button>
