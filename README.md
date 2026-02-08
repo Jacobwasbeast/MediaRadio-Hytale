@@ -5,8 +5,8 @@ or while a Boombox is placed, and the UI provides a media-player style interface
 play/pause/stop, seek, looping, and a per-player library.
 
 ## Features
-- Plays web audio from supported URLs (YouTube, etc.) using embedded yt-dlp + ffmpeg.
-- Audio is downloaded, converted to OGG, and chunked for streaming (with reduced streaming lag).
+- Plays web audio from supported URLs (YouTube, etc.) via the companion `media-tools` mod (yt-dlp + ffmpeg).
+- Audio is downloaded, converted to OGG, and chunked into Hytale `SoundEvent` assets for streaming.
 - Portable Radio (handheld) and Boombox (placeable) items.
 - Per-player libraries: each player only sees the songs they requested.
 - Thumbnails are downloaded and registered as dynamic assets.
@@ -14,10 +14,16 @@ play/pause/stop, seek, looping, and a per-player library.
 - Portable Radio includes a proper model and animation set.
 
 ## Notes
+- UI: This project uses HyUI-style `.ui` pages for the in-game interface. If you are building from source or extending the UI, HyUI is required. (Docs are vendored in `HyUI-Docs-main/`.)
 - Embedded tools live in the `media-tools` subproject and are loaded from the classpath.
 - If you ship separate jars, include the MediaRadio jar and the `media-tools` jar together.
 - This mod uses runtime asset packs under `run/media_radio_assets`.
 - For now, client-hosted/singleplayer worlds are not supported; the mod needs a dedicated server environment and access to external tools (sandboxing prevents this). Future support is planned.
+
+## Playback System
+Playback is session-based and chunk-scheduled:
+- A `MediaPlaybackManager` manages active playback sessions for handheld radios (per-player) and boomboxes (per-block position).
+- Tracks are played by scheduling chunked `SoundEvent` assets, and an audio-marker NPC is used to keep the audio source positioned correctly in-world.
 
 ## Recipe
 - Crafted at a Furniture Bench (Furniture Misc).
@@ -27,6 +33,9 @@ play/pause/stop, seek, looping, and a per-player library.
 ![Portable Radio held](Screenshots/RadioHeld.png)
 ![Boombox placed](Screenshots/BoomboxPlaced.png)
 ![Media radio UI](Screenshots/UI.png)
+![Library UI](Screenshots/Library_UI.png)
+![Playlists UI (Main)](Screenshots/Playlists_UI_Main.png)
+![Playlists UI (Selected)](Screenshots/Playlists_UI_Selected.png)
 
 ## Setup (Prebuilt)
 1. Download the latest MediaRadio mod binaries.
