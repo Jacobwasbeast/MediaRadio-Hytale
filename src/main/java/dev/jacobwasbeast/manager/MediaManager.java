@@ -166,7 +166,7 @@ public class MediaManager {
             // pack
 
             plugin.getLogger().at(Level.INFO).log("Registering runtime asset pack at: %s", runtimeAssetsPath);
-            AssetModule.get().registerPack(RUNTIME_PACK_NAME, runtimeAssetsPath, manifest);
+            AssetModule.get().registerPack(RUNTIME_PACK_NAME, runtimeAssetsPath, manifest, true);
             disableRuntimeAssetNotifications();
 
         } catch (Exception e) {
